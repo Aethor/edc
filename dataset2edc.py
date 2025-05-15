@@ -14,7 +14,8 @@
 # The script outputs is as follows:
 #
 # - ./dsets/{dataset_name}.json : quadruple description, one per line
-# - ./evaluate/references/{dataset_name}.json :
+# - ./evaluate/references/{dataset_name}.json : quadruple to extract,
+#   one per line, in the format "[['subj', 'rel', 'obj', 'ts']]"
 from typing import Tuple
 import argparse, json, re
 import pathlib as pl
