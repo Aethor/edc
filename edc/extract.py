@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import os
 from pathlib import Path
 import edc.utils.llm_utils as llm_utils
@@ -24,8 +24,8 @@ class Extractor:
         input_text_str: str,
         few_shot_examples_str: str,
         prompt_template_str: str,
-        entities_hint: str = None,
-        relations_hint: str = None,
+        entities_hint: Optional[str] = None,
+        relations_hint: Optional[str] = None,
     ) -> List[List[str]]:
         assert (entities_hint is None and relations_hint is None) or (
             relations_hint is not None and relations_hint is not None

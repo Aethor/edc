@@ -3,7 +3,7 @@ from edc.schema_definition import SchemaDefiner
 from edc.schema_canonicalization import SchemaCanonicalizer
 from edc.entity_extraction import EntityExtractor
 import edc.utils.llm_utils as llm_utils
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from edc.utils.e5_mistral_utils import MistralForSequenceEmbedding
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from edc.schema_retriever import SchemaRetriever
@@ -68,14 +68,14 @@ class EDC:
         self.initial_schema_path = edc_configuration["target_schema_path"]
         self.enrich_schema = edc_configuration["enrich_schema"]
 
+        self.schema: Dict[str, str] = {}
         if self.initial_schema_path is not None:
             reader = csv.reader(open(self.initial_schema_path, "r"))
+            # { relation => description }
             self.schema = {}
             for row in reader:
                 relation, relation_definition = row
                 self.schema[relation] = relation_definition
-        else:
-            self.schema = {}
 
         # Load the needed models and tokenizers
         self.needed_model_set = set(
@@ -97,9 +97,9 @@ class EDC:
     def oie(
         self,
         input_text_list: List[str],
-        previous_extracted_quadruples_list: Optional[List[List[str]]] = None,
+        previous_extracted_quadruples_list: Optional[List[List[List[str]]]] = None,
         free_model=False,
-    ) -> Tuple[list, list, list]:
+    ) -> Tuple[List[List[List[str]]], List[str], List[str]]:
         if not llm_utils.is_model_openai(self.oie_llm_name):
             # Load the HF model for OIE
             oie_model, oie_tokenizer = self.load_model(self.oie_llm_name, "hf")
@@ -117,7 +117,7 @@ class EDC:
         else:
             extractor = Extractor(openai_model=self.oie_llm_name)
 
-        oie_quadruples_list = []
+        oie_quadruples_list: List[List[List[str]]] = []
         entity_hint_list = None
         relation_hint_list = None
 
@@ -131,7 +131,6 @@ class EDC:
                 self.oie_r_few_shot_example_file_path
             ).read()
 
-            # TODO: 3->4
             logger.info("Putting together the refinement hint...")
             entity_hint_list, relation_hint_list = self.construct_refinement_hint(
                 input_text_list,
@@ -144,14 +143,14 @@ class EDC:
                 input_text = input_text_list[idx]
                 entity_hint_str = entity_hint_list[idx]
                 relation_hint_str = relation_hint_list[idx]
-                refined_oie_triplets = extractor.extract(
+                refined_oie_quads = extractor.extract(
                     input_text,
                     oie_refinement_few_shot_examples_str,
                     oie_refinement_prompt_template_str,
                     entity_hint_str,
                     relation_hint_str,
                 )
-                oie_quadruples_list.append(refined_oie_triplets)
+                oie_quadruples_list.append(refined_oie_quads)
         else:
             # Normal OIE
             entity_hint_list = ["" for _ in input_text_list]
@@ -203,10 +202,10 @@ class EDC:
     def schema_definition(
         self,
         input_text_list: List[str],
-        oie_triplets_list: List[List[str]],
+        oie_quads_list: List[List[List[str]]],
         free_model=False,
     ):
-        assert len(input_text_list) == len(oie_triplets_list)
+        assert len(input_text_list) == len(oie_quads_list)
 
         if not llm_utils.is_model_openai(self.sd_llm_name):
             # Load the HF model for Schema Definition
@@ -235,16 +234,16 @@ class EDC:
         schema_definition_dict_list = []
 
         logger.info("Running Schema Definition...")
-        for idx, oie_triplets in enumerate(tqdm(oie_triplets_list)):
+        for idx, oie_quads in enumerate(tqdm(oie_quads_list)):
             schema_definition_dict = schema_definer.define_schema(
                 input_text_list[idx],
-                oie_triplets,
+                oie_quads,
                 schema_definition_few_shot_examples_str,
                 schema_definition_few_shot_prompt_template_str,
             )
             schema_definition_dict_list.append(schema_definition_dict)
             logger.debug(
-                f"{input_text_list[idx]}, {oie_triplets}\n -> {schema_definition_dict}\n"
+                f"{input_text_list[idx]}, {oie_quads}\n -> {schema_definition_dict}\n"
             )
 
         logger.info("Schema Definition finished.")
@@ -257,11 +256,11 @@ class EDC:
     def schema_canonicalization(
         self,
         input_text_list: List[str],
-        oie_triplets_list: List[List[str]],
+        oie_quads_list: List[List[List[str]]],
         schema_definition_dict_list: List[dict],
         free_model=False,
-    ):
-        assert len(input_text_list) == len(oie_triplets_list) and len(
+    ) -> Tuple[List[List[Optional[List[str]]]], List[List[dict]]]:
+        assert len(input_text_list) == len(oie_quads_list) and len(
             input_text_list
         ) == len(schema_definition_dict_list)
         logger.info("Running Schema Canonicalization...")
@@ -301,33 +300,31 @@ class EDC:
                 self.schema, sc_embedder, verify_openai_model=self.sc_llm_name
             )
 
-        canonicalized_triplets_list = []
-        canon_candidate_dict_per_entry_list = []
+        canonicalized_quads_list: List[List[Optional[List[str]]]] = []
+        canon_candidate_dict_per_entry_list: List[List[dict]] = []
 
         for idx, input_text in enumerate(tqdm(input_text_list)):
-            oie_triplets = oie_triplets_list[idx]
-            canonicalized_triplets = []
+            oie_quads = oie_quads_list[idx]
+            canonicalized_quads: List[Optional[List[str]]] = []
             sd_dict = schema_definition_dict_list[idx]
-            canon_candidate_dict_list = []
-            for oie_triplet in oie_triplets:
-                canonicalized_triplet, canon_candidate_dict = (
+            canon_candidate_dict_list: List[dict] = []
+            for oie_quad in oie_quads:
+                canonicalized_quad, canon_candidate_dict = (
                     schema_canonicalizer.canonicalize(
                         input_text,
-                        oie_triplet,
+                        oie_quad,
                         sd_dict,
                         sc_verify_prompt_template_str,
                         self.enrich_schema,
                     )
                 )
-                canonicalized_triplets.append(canonicalized_triplet)
+                canonicalized_quads.append(canonicalized_quad)
                 canon_candidate_dict_list.append(canon_candidate_dict)
 
-            canonicalized_triplets_list.append(canonicalized_triplets)
+            canonicalized_quads_list.append(canonicalized_quads)
             canon_candidate_dict_per_entry_list.append(canon_candidate_dict_list)
 
-            logger.debug(
-                f"{input_text}\n, {oie_triplets} ->\n {canonicalized_triplets}"
-            )
+            logger.debug(f"{input_text}\n, {oie_quads} ->\n {canonicalized_quads}")
             logger.debug(f"Retrieved candidate relations {canon_candidate_dict}")
         logger.info("Schema Canonicalization finished.")
 
@@ -339,12 +336,12 @@ class EDC:
             llm_utils.free_model(sc_verify_model, sc_verify_tokenizer)
             del self.loaded_model_dict[self.sc_llm_name]
 
-        return canonicalized_triplets_list, canon_candidate_dict_per_entry_list
+        return canonicalized_quads_list, canon_candidate_dict_per_entry_list
 
     def construct_refinement_hint(
         self,
         input_text_list: List[str],
-        extracted_triplets_list: List[List[List[str]]],
+        extracted_quads_list: List[List[List[str]]],
         include_relation_example="self",
         relation_top_k=10,
         free_model=False,
@@ -399,16 +396,16 @@ class EDC:
             # Include an example of where this relation can be extracted
             for idx in range(len(input_text_list)):
                 input_text_str = input_text_list[idx]
-                extracted_triplets = extracted_triplets_list[idx]
-                for triplet in extracted_triplets:
-                    relation = triplet[1]
+                extracted_quads = extracted_quads_list[idx]
+                for quad in extracted_quads:
+                    relation = quad[1]
                     if relation not in relation_example_dict:
                         relation_example_dict[relation] = [
-                            {"text": input_text_str, "triplet": triplet}
+                            {"text": input_text_str, "quadruple": quad}
                         ]
                     else:
                         relation_example_dict[relation].append(
-                            {"text": input_text_str, "triplet": triplet}
+                            {"text": input_text_str, "quadruple": quad}
                         )
         else:
             # Todo: allow to pass gold examples of relations
@@ -416,15 +413,15 @@ class EDC:
 
         for idx in tqdm(range(len(input_text_list))):
             input_text_str = input_text_list[idx]
-            extracted_triplets = extracted_triplets_list[idx]
+            extracted_quads = extracted_quads_list[idx]
 
             previous_relations = set()
             previous_entities = set()
 
-            for triplet in extracted_triplets:
-                previous_entities.add(triplet[0])
-                previous_entities.add(triplet[2])
-                previous_relations.add(triplet[1])
+            for quad in extracted_quads:
+                previous_entities.add(quad[0])
+                previous_entities.add(quad[2])
+                previous_relations.add(quad[1])
 
             previous_entities = list(previous_entities)
             previous_relations = list(previous_relations)
@@ -444,7 +441,7 @@ class EDC:
             entity_hint_list.append(str(merged_entities))
 
             # Obtain candidate relations
-            hint_relations = previous_relations
+            hint_relations: List[str] = previous_relations
 
             retrieved_relations = schema_retriever.retrieve_relevant_relations(
                 input_text_str
@@ -484,7 +481,7 @@ class EDC:
                         #         selected_example = example
                         #         break
                         if selected_example is not None:
-                            candidate_relation_str += f"""For example, {selected_example['triplet']} can be extracted from "{selected_example['text']}"\n"""
+                            candidate_relation_str += f"""For example, {selected_example['quadruple']} can be extracted from "{selected_example['text']}"\n"""
                         else:
                             # candidate_relation_str += "Example: None.\n"
                             pass
@@ -503,7 +500,7 @@ class EDC:
     def extract_kg(
         self,
         input_text_list: List[str],
-        output_dir: str = None,
+        output_dir: Optional[str] = None,
         refinement_iterations=0,
     ):
         if output_dir is not None:
@@ -536,7 +533,7 @@ class EDC:
             required_model_dict_current_iteration = copy.deepcopy(required_model_dict)
 
             del required_model_dict_current_iteration["oie"]
-            oie_quadruples_list, entity_hint_list, relation_hint_list = self.oie(
+            oie_quads_list, entity_hint_list, relation_hint_list = self.oie(
                 input_text_list,
                 free_model=self.oie_llm_name
                 not in required_model_dict_current_iteration.values()
@@ -547,7 +544,7 @@ class EDC:
             del required_model_dict_current_iteration["sd"]
             sd_dict_list = self.schema_definition(
                 input_text_list,
-                oie_quadruples_list,
+                oie_quads_list,
                 free_model=self.sd_llm_name
                 not in required_model_dict_current_iteration.values()
                 and iteration == refinement_iterations,
@@ -555,44 +552,42 @@ class EDC:
 
             del required_model_dict_current_iteration["sc_embed"]
             del required_model_dict_current_iteration["sc_verify"]
-            canon_triplets_list, canon_candidate_dict_list = (
-                self.schema_canonicalization(
-                    input_text_list,
-                    oie_quadruples_list,
-                    sd_dict_list,
-                    free_model=self.sc_llm_name
-                    not in required_model_dict_current_iteration.values()
-                    and iteration == refinement_iterations,
-                )
+            canon_quads_list, canon_candidate_dict_list = self.schema_canonicalization(
+                input_text_list,
+                oie_quads_list,
+                sd_dict_list,
+                free_model=self.sc_llm_name
+                not in required_model_dict_current_iteration.values()
+                and iteration == refinement_iterations,
             )
 
-            non_null_triplets_list = [
-                [triple for triple in triplets if triple is not None]
-                for triplets in canon_triplets_list
+            non_null_quads_list = [
+                [quad for quad in quads if quad is not None]
+                for quads in canon_quads_list
             ]
             # for triplets in canon_triplets_list:
             #     non_null_triplets = []
             #     for triple in triplets:
             #         if triple is not None:
             #             non_n
-            quadruples_from_last_iteration = non_null_triplets_list
+            quadruples_from_last_iteration = non_null_quads_list
 
             # Write results
-            assert len(oie_quadruples_list) == len(sd_dict_list) and len(
+            assert len(oie_quads_list) == len(sd_dict_list) and len(
                 sd_dict_list
-            ) == len(canon_triplets_list)
+            ) == len(canon_quads_list)
 
             json_results_list = []
-            for idx in range(len(oie_quadruples_list)):
+            for idx in range(len(oie_quads_list)):
                 result_json = {
                     "index": idx,
                     "input_text": input_text_list[idx],
                     "entity_hint": entity_hint_list[idx],
                     "relation_hint": relation_hint_list[idx],
-                    "oie": oie_quadruples_list[idx],
+                    "oie": oie_quads_list[idx],
                     "schema_definition": sd_dict_list[idx],
                     "canonicalization_candidates": str(canon_candidate_dict_list[idx]),
-                    "schema_canonicalizaiton": canon_triplets_list[idx],
+                    "schema_canonicalizaiton": canon_quads_list[idx],
                 }
                 json_results_list.append(result_json)
             result_at_each_stage_file = open(
@@ -601,10 +596,10 @@ class EDC:
             json.dump(json_results_list, result_at_each_stage_file, indent=4)
 
             final_result_file = open(f"{iteration_result_dir}/canon_kg.txt", "w")
-            for idx, canon_triplets in enumerate(non_null_triplets_list):
-                final_result_file.write(str(canon_triplets))
-                if idx != len(canon_triplets_list) - 1:
+            for idx, canon_quads in enumerate(non_null_quads_list):
+                final_result_file.write(str(canon_quads))
+                if idx != len(canon_quads_list) - 1:
                     final_result_file.write("\n")
                 final_result_file.flush()
 
-        return canon_triplets_list
+        return canon_quads_list

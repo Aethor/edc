@@ -1,3 +1,4 @@
+from typing import Dict
 import os
 import openai
 import time
@@ -25,7 +26,7 @@ def free_model(model: AutoModelForCausalLM = None, tokenizer: AutoTokenizer = No
         logger.warning(e)
 
 
-def get_embedding_e5mistral(model, tokenizer, sentence, task=None):
+def get_embedding_e5mistral(model, tokenizer, sentence, task=None) -> torch.Tensor:
     model.eval()
     device = model.device
 
@@ -67,12 +68,12 @@ def get_detailed_instruct(task_description: str, query: str) -> str:
 
 def get_embedding_sts(
     model: SentenceTransformer, text: str, prompt_name=None, prompt=None
-):
+) -> torch.Tensor:
     embedding = model.encode(text, prompt_name=prompt_name, prompt=prompt)
     return embedding
 
 
-def parse_raw_entities(raw_entities: str):
+def parse_raw_entities(raw_entities: str) -> List[str]:
     parsed_entities = []
     left_bracket_idx = raw_entities.index("[")
     right_bracket_idx = raw_entities.index("]")
@@ -86,13 +87,12 @@ def parse_raw_entities(raw_entities: str):
     return parsed_entities
 
 
-# TODO: 3->4
-def parse_raw_quadruples(raw_quadruples: str):
+def parse_raw_quadruples(raw_quadruples: str) -> List[List[str]]:
     # Look for enclosing brackets
     unmatched_left_bracket_indices = []
     matched_bracket_pairs = []
 
-    collected_triples = []
+    collected_quadruples = []
     for c_idx, c in enumerate(raw_quadruples):
         if c == "[":
             unmatched_left_bracket_indices.append(c_idx)
@@ -105,24 +105,22 @@ def parse_raw_quadruples(raw_quadruples: str):
     for l, r in matched_bracket_pairs:
         bracketed_str = raw_quadruples[l : r + 1]
         try:
-            parsed_triple = ast.literal_eval(bracketed_str)
-            if len(parsed_triple) == 3 and all(
-                [isinstance(t, str) for t in parsed_triple]
-            ):
-                if all([e != "" and e != "_" for e in parsed_triple]):
-                    collected_triples.append(parsed_triple)
-            elif not all([type(x) == type(parsed_triple[0]) for x in parsed_triple]):
-                for e_idx, e in enumerate(parsed_triple):
+            parsed_quad = ast.literal_eval(bracketed_str)
+            if len(parsed_quad) == 4 and all([isinstance(t, str) for t in parsed_quad]):
+                if all([e != "" and e != "_" for e in parsed_quad]):
+                    collected_quadruples.append(parsed_quad)
+            elif not all([type(x) == type(parsed_quad[0]) for x in parsed_quad]):
+                for e_idx, e in enumerate(parsed_quad):
                     if isinstance(e, list):
-                        parsed_triple[e_idx] = ", ".join(e)
-                collected_triples.append(parsed_triple)
+                        parsed_quad[e_idx] = ", ".join(e)
+                collected_quadruples.append(parsed_quad)
         except Exception as e:
             pass
-    logger.debug(f"Triplets {raw_quadruples} parsed as {collected_triples}")
-    return collected_triples
+    logger.debug(f"Quadruples {raw_quadruples} parsed as {collected_quadruples}")
+    return collected_quadruples
 
 
-def parse_relation_definition(raw_definitions: str):
+def parse_relation_definition(raw_definitions: str) -> Dict[str, str]:
     descriptions = raw_definitions.split("\n")
     relation_definition_dict = {}
 
@@ -154,7 +152,7 @@ def generate_completion_transformers(
     tokenizer: AutoTokenizer,
     max_new_token=256,
     answer_prepend="",
-):
+) -> str:
     device = model.device
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -187,7 +185,7 @@ def generate_completion_transformers(
 
 def openai_chat_completion(
     model, system_prompt, history, temperature=0, max_tokens=512
-):
+) -> str:
     openai.api_key = os.environ["OPENAI_KEY"]
     response = None
     if system_prompt is not None:
@@ -204,7 +202,7 @@ def openai_chat_completion(
             )
         except Exception as e:
             time.sleep(5)
-    logging.debug(
-        f"Model: {model}\nPrompt:\n {messages}\n Result: {response.choices[0].message.content}"
-    )
-    return response.choices[0].message.content
+    result = response.choices[0].message.content
+    assert not result is None
+    logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {result}")
+    return result
