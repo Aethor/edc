@@ -97,7 +97,8 @@ if __name__ == "__main__":
     print(f"writing to {desc_path}...", end="")
     with open(desc_path, "w") as f:
         for quad in data:
-            f.write(f"{quad['description']}\n")
+            description = re.sub(r"\n", "", quad["description"])
+            f.write(f"{description}\n")
     print("done!")
 
     ref_path = pl.Path("./evaluate/references/") / f"{args.input_file.stem}.txt"
