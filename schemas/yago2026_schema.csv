@@ -1,0 +1,54 @@
+schema:memberOf,The subject entity is a member of the organization specified by the object entity
+schema:alumniOf,The subject entity is an alumni of the organization specified by the object entity
+schema:worksFor,The subject entity works for the organization specified by the object entity
+schema:award,The subject entity has won the award specified by the object entity
+yago:academicDegree,The subject entity has the degree specified by the object entity
+yago:replaces,The subject entity replaces the object entity
+yago:playsIn,The subject entity plays in the structure specified by the object entity
+schema:location,The subject entity is at the location specified by the object entity
+schema:spouse,The subject entity is married to the object entity
+schema:sponsor,The subject entity is sponsored by the object entity
+schema:nationality,The subject entity has the nationality specified by the object entity
+schema:homeLocation,The subject entity's home is at the location specified by the object entity
+schema:affiliation,The subject entity is affiliated by the organization specified by the object entity
+schema:manufacturer,The subject entity is manufactured by the organization specified by the object entity
+yago:ownedBy,The subject entity is owned by the object entity
+yago:leader,The subject entity is being lead by the object entity
+yago:participant,The subject entity has a participant specified by the object entity
+schema:contentLocation,The subject entity depicts or describe the location specified by the object entity
+schema:owns,The subject entity owns the object entity
+yago:notableWork,The subject entity has a notable work specified by the object entity
+yago:neighbors,The subject entity is neighboring the object entity
+yago:capital,The subject entity has the object entity for capital
+yago:terminus,The terminus of the subject entity is the object entity
+yago:beliefSystem,The subject entity adheres to the belief system specified by the object entity
+schema:founder,The subject entity was founded by the object entity
+yago:doctoralAdvisor,The subject entity's doctoral advisor is the object entity
+schema:actor,The subject entity has an actor specified by the object entity
+yago:sportNumber,The subject entity's sport number is the object entity
+schema:locationCreated,The subject entity was created at the location specified by the object entity
+schema:performer,The subject entity has a performer specified by the object entity
+schema:musicBy,The music of the subject entity was composed by the object entity
+yago:director,The subject entity's director is the object entity
+yago:appearsIn,The subject entity appears in the creative work specified by the object entity
+schema:publisher,The subject entity was published by the object entity
+yago:conferredBy,The subject entity is conferred by the object entity
+yago:candidateIn,The subject entity is a candidate in the event specified by the object entity
+schema:editor,The subject entity was edited by the person specified by the object entity
+schema:superEvent,The subject entity is part of a bigger event specified by the object entity
+schema:director,The subject entity is directed by the object entity
+schema:inLanguage,The subject entity is in the language specified by the object entity
+schema:lyricist,The lyrics of the subject entity were written by the object entity
+schema:organizer,The subject entity is organized by the object entity
+schema:material,The subject entity is made of the material specified by the object entity
+schema:productionCompany,The subject entity was produced by the organization specified by the object entity
+yago:studentOf,The subject entity is a student of the object entity
+schema:children,The subject entity is the parent of the object entity
+yago:follows,The subject entity is a followup to the object entity
+schema:knowsLanguage,The subject entity knows the language specified by the object entity
+yago:influencedBy,The subject entity was influenced by the object entity
+schema:gender,The subject entity has the gender specified by the object entity
+schema:recordLabel,The subject entity was released by the label specified by the object entity
+yago:flowsInto,The subject entity flows into the object entity
+yago:officialLanguage,The subject entity has an official language specified by the object entity
+yago:lowestPoint,The lowest point of the subject entity is the object entity
