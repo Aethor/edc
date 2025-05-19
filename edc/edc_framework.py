@@ -323,7 +323,10 @@ class EDC:
             )
             llm_utils.free_model(sc_embedder)
             llm_utils.free_model(sc_verify_model, sc_verify_tokenizer)
-            del self.loaded_model_dict[self.sc_llm_name]
+            try:
+                del self.loaded_model_dict[self.sc_llm_name]
+            except KeyError:
+                pass
 
         return canonicalized_quads_list, canon_candidate_dict_per_entry_list
 
