@@ -19,5 +19,5 @@ Text: Evan Beucler began playing in NCAA Division I Men's Basketball starting Ja
 Quadruples: [['Evan Beucler','startPlaysIn','Ncaa Division I Men U0027 S Basketball', '2016-01-01']] 
 
 Example 6:
-Text: In a surprise move, Charles Leclerc announced his intention to leave the Ferrari F1 on September 1st, 2026. Fans are left puzzled with this decision, as the man from Monaco had become the main figure of the team for several years.
+Text: In a surprise move, Charles Leclerc announced his intention to leave the Ferrari F1 team on September 1st, 2026. Fans are left puzzled with this decision, as the man from Monaco had become the main figure of the team for several years.
 Quadruples: [['Charles Leclerc', 'endMemberOf', 'Ferrari F1 team', '2026-09-01']]
