@@ -5,6 +5,7 @@ from edc.entity_extraction import EntityExtractor
 import edc.utils.llm_utils as llm_utils
 from typing import Dict, List, Optional, Tuple
 from edc.utils.e5_mistral_utils import MistralForSequenceEmbedding
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from edc.schema_retriever import SchemaRetriever
 from tqdm import tqdm
@@ -190,7 +191,9 @@ class EDC:
             logger.info(f"Loading model {model_name}")
             if model_type == "hf":
                 model, tokenizer = (
-                    AutoModelForCausalLM.from_pretrained(model_name, device_map="auto"),
+                    AutoModelForCausalLM.from_pretrained(
+                        model_name, device_map="auto", torch_dtype=torch.bfloat16
+                    ),
                     AutoTokenizer.from_pretrained(model_name),
                 )
                 self.loaded_model_dict[model_name] = (model, tokenizer)
