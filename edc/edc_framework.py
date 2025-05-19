@@ -198,7 +198,11 @@ class EDC:
                 )
                 self.loaded_model_dict[model_name] = (model, tokenizer)
             elif model_type == "sts":
-                model = SentenceTransformer(model_name, trust_remote_code=True)
+                model = SentenceTransformer(
+                    model_name,
+                    trust_remote_code=True,
+                    model_kwargs={"torch_dtype": torch.bfloat16},
+                )
                 self.loaded_model_dict[model_name] = model
         return self.loaded_model_dict[model_name]
 
