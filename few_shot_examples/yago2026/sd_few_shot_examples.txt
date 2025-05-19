@@ -1,0 +1,29 @@
+Example 1:
+Text: On January 1, 2026, the iconic creator of the Linux kernel, Linus Torvalds, is set to officially join Microsoft.
+Quadruples: [['Linus_Torvalds', 'startWorksFor', 'Microsoft', '2026-01-01']]
+Relations: ['startWorksFor']
+
+Example 2:
+Text: As of January 11, 2026, İbrahim Öztürk is officially slated to become a member of Hacettepe S. K.
+Quadruples: [['İbrahim Öztürk', 'startMemberOf', 'Hacettepe S. K.', '2026-01-11']]
+Relations: ['startMemberOf']
+
+Example 3:
+Text: Jean-René Chazottes will conclude his leadership role at the Center of Theoretical Physics on December 31, 2024.
+Quadruples: [['Center of Theoretical Physics', 'endLeader', 'Jean-René Chazottes', '2024-12-31']]
+Relations: ['endLeader']
+
+Example 4:
+Text: Duan Zhao's status as an alumnus of the University of Hong Kong will conclude on August 31, 2024.
+Quadruples: [['Duan Zhao', 'endAlumniOf', 'University of Hong Kong', '2024-08-31']] 
+Relations: ['endAlumniOf']
+
+Example 5:
+Text: Evan Beucler began playing in NCAA Division I Men's Basketball starting January 1, 2016.
+Quadruples: [['Evan Beucler','startPlaysIn','Ncaa Division I Men U0027 S Basketball', '2016-01-01']] 
+Relations: ['startPlaysIn']
+
+Example 6:
+Text: In a surprise move, Charles Leclerc announced his intention to leave the Ferrari F1 team on September 1st, 2026. Fans are left puzzled with this decision, as the man from Monaco had become the main figure of the team for several years.
+Quadruples: [['Charles Leclerc', 'endMemberOf', 'Ferrari F1 team', '2026-09-01']]
+Relations: ['endMemberOf']
