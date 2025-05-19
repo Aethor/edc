@@ -217,17 +217,6 @@ class EDC:
         if not llm_utils.is_model_openai(self.sd_llm_name):
             # Load the HF model for Schema Definition
             sd_model, sd_tokenizer = self.load_model(self.sd_llm_name, "hf")
-            # if self.sd_llm_name not in self.loaded_model_dict:
-            #     logger.info(f"Loading model {self.sd_llm_name}")
-            #     sd_model, sd_tokenizer = (
-            #         AutoModelForCausalLM.from_pretrained(self.sd_llm_name, device_map="auto"),
-            #         AutoTokenizer.from_pretrained(self.sd_llm_name),
-            #     )
-            #     self.loaded_model_dict[self.sd_llm_name] = (sd_model, sd_tokenizer)
-            #     logger.info(f"Loading model {self.sd_llm_name}.")
-            # else:
-            #     logger.info(f"Model {self.sd_llm_name} is already loaded, reusing it.")
-            #     sd_model, sd_tokenizer = self.loaded_model_dict[self.sd_llm_name]
             schema_definer = SchemaDefiner(model=sd_model, tokenizer=sd_tokenizer)
         else:
             schema_definer = SchemaDefiner(openai_model=self.sd_llm_name)
@@ -557,11 +546,6 @@ class EDC:
                 [quad for quad in quads if quad is not None]
                 for quads in canon_quads_list
             ]
-            # for triplets in canon_triplets_list:
-            #     non_null_triplets = []
-            #     for triple in triplets:
-            #         if triple is not None:
-            #             non_n
             quadruples_from_last_iteration = non_null_quads_list
 
             # Write results

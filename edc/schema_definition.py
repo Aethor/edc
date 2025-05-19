@@ -27,7 +27,9 @@ class SchemaDefiner:
         few_shot_examples_str: str,
         prompt_template_str: str,
     ) -> Dict[str, str]:
-        # Given a piece of text and a list of triplets extracted from it, define each of the relation present
+        """Given a piece of text and a list of quadruples extracted
+        from it, define each of the relation present
+        """
 
         relations_present = set()
         for t in extracted_quads_list:
@@ -44,7 +46,6 @@ class SchemaDefiner:
         messages = [{"role": "user", "content": filled_prompt}]
 
         if self.openai_model is None:
-            # llm_utils.generate_completion_transformers([messages], self.model, self.tokenizer, device=self.device)
             completion = llm_utils.generate_completion_transformers(
                 messages, self.model, self.tokenizer, answer_prepend="Answer: "
             )
