@@ -274,31 +274,12 @@ class EDC:
 
         sc_verify_prompt_template_str = open(self.sc_template_file_path).read()
 
-        # if self.sc_embedder_name not in self.loaded_model_dict:
-        #     logger.info(f"Loading model {self.sc_embedder_name}.")
-        #     sc_embedder = SentenceTransformer(self.sc_embedder_name, trust_remote_code=True)
-        #     self.loaded_model_dict[self.sc_embedder_name] = sc_embedder
-
-        # else:
-        #     logger.info(f"Model {self.sc_embedder_name} is already loaded, reusing it.")
-        #     sc_embedder = self.loaded_model_dict[self.sc_embedder_name]
-
         sc_embedder = self.load_model(self.sc_embedder_name, "sts")
 
         if not llm_utils.is_model_openai(self.sc_llm_name):
             sc_verify_model, sc_verify_tokenizer = self.load_model(
                 self.sc_llm_name, "sts"
             )
-            # if self.sc_llm_name not in self.loaded_model_dict:
-            #     logger.info(f"Loading model {self.sc_llm_name}")
-            #     sc_verify_model, sc_verify_tokenizer = (
-            #         AutoModelForCausalLM.from_pretrained(self.sc_llm_name, device_map="auto"),
-            #         AutoTokenizer.from_pretrained(self.sc_llm_name),
-            #     )
-            #     self.loaded_model_dict[self.sc_llm_name] = (sc_verify_model, sc_verify_tokenizer)
-            # else:
-            #     logger.info(f"Model {self.sc_llm_name} is already loaded, reusing it.")
-            #     sc_verify_model, sc_verify_tokenizer = self.loaded_model_dict[self.sc_llm_name]
             schema_canonicalizer = SchemaCanonicalizer(
                 self.schema, sc_embedder, sc_verify_model, sc_verify_tokenizer
             )
@@ -306,6 +287,7 @@ class EDC:
             schema_canonicalizer = SchemaCanonicalizer(
                 self.schema, sc_embedder, verify_openai_model=self.sc_llm_name
             )
+            sc_verify_model, sc_verify_tokenizer = None, None
 
         canonicalized_quads_list: List[List[Optional[List[str]]]] = []
         canon_candidate_dict_per_entry_list: List[List[dict]] = []
