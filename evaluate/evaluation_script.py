@@ -4,6 +4,7 @@ from sklearn.exceptions import UndefinedMetricWarning
 
 # ignore all UndefinedMetricWarning warnings
 simplefilter(action="ignore", category=UndefinedMetricWarning)
+from typing import Literal, Tuple, List
 from bs4 import BeautifulSoup
 import os
 import regex as re
@@ -23,6 +24,10 @@ import ast
 import xml.etree.ElementTree as ET
 
 
+TripleEltType = Literal["SUB", "PRED", "OBJ"]
+yn = Literal["y", "n"]
+
+
 def convert_to_xml(result_path: str, gold_path: str, max_length_diff=None):
     output_dir = result_path.split(os.sep)[-2]
     os.makedirs(f"./result_xmls/{output_dir}", exist_ok=True)
@@ -36,7 +41,6 @@ def convert_to_xml(result_path: str, gold_path: str, max_length_diff=None):
     collected_gold_triplets = []
 
     for idx, triplets in enumerate(pred_triplets):
-
         try:
             evaled_triplets = ast.literal_eval(triplets)
             for triplet in evaled_triplets:
@@ -64,7 +68,9 @@ def convert_to_xml(result_path: str, gold_path: str, max_length_diff=None):
     collected = 0
 
     for idx in range(len(collected_gold_triplets)):
-        length_diff = abs(len(collected_gold_triplets[idx]) - len(collected_pred_triplets[idx]))
+        length_diff = abs(
+            len(collected_gold_triplets[idx]) - len(collected_pred_triplets[idx])
+        )
 
         if max_length_diff is not None:
             if length_diff > int(max_length_diff):
@@ -110,7 +116,7 @@ def getText(filepath):
     return texts
 
 
-def getRefs(filepath):
+def getRefs(filepath) -> Tuple[List[List[str]], List[List[str]]]:
     with open(filepath, encoding="utf-8") as fp:
         refssoup = BeautifulSoup(fp, "lxml")
 
@@ -146,7 +152,7 @@ def getRefs(filepath):
     return allreftriples, newreflist
 
 
-def getCands(filepath):
+def getCands(filepath) -> Tuple[List[List[str]], List[List[str]]]:
     with open(filepath, encoding="utf-8") as fp:
         candssoup = BeautifulSoup(fp, "lxml")
 
@@ -188,9 +194,23 @@ def find_sub_list(sl, l):
             return ind, ind + sll - 1
 
 
-# We are going to try to find matches with the reference, starting with the highest chunk possible (all the words in the reference).
-# If we don't find that, we are going to search for all n-grams -1 the number of words in the reference; than -2; than -3; etc.
-def nonrefwords(newreflist, newcandlist, foundnum, ngramlength):
+def nonrefwords(
+    newreflist: list[str], newcandlist: list[str], foundnum: int, ngramlength: int
+) -> tuple[list[str], list[str]]:
+    """We are going to try to find matches with the reference,
+    starting with the highest chunk possible (all the words in the
+    reference).  If we don't find that, we are going to search for all
+    n-grams -1 the number of words in the reference; than -2; than -3;
+    etc.
+
+    >>> nonrefwords("this is a test".split(), "this is a".split(), 1, 2)
+    (['FOUNDREF-1-0', 'FOUNDREF-1-1', 'FOUNDREF-2-2', 'test'], ['FOUNDCAND-1-0', 'FOUNDCAND-1-1', 'FOUNDCAND-2-2'])
+
+    :param newreflist: a list of tokens
+    :param newcandlist: a list of tokens
+    :param foundnum:
+    :param ngramlength:
+    """
     while ngramlength > 0:
         # Get a list of all the ngrams of that size
         ngramlist = list(ngrams(newcandlist, ngramlength))
@@ -211,7 +231,9 @@ def nonrefwords(newreflist, newcandlist, foundnum, ngramlength):
                 newcandindex = list(range(findnewcand[0], findnewcand[1] + 1))
                 # Change the matched words to FOUNDCAND-[FOUNDNUMBER]-[REFERENCE-FOUNDINDEX]
                 for idx, val in enumerate(newcandindex):
-                    newcandlist[val] = "FOUNDCAND-" + str(foundnum) + "-" + str(newrefindex[idx])
+                    newcandlist[val] = (
+                        "FOUNDCAND-" + str(foundnum) + "-" + str(newrefindex[idx])
+                    )
                 foundnum += 1
                 # And try to find new matches again
                 nonrefwords(newreflist, newcandlist, foundnum, ngramlength)
@@ -221,10 +243,29 @@ def nonrefwords(newreflist, newcandlist, foundnum, ngramlength):
     return newreflist, newcandlist
 
 
-def getrefdict(newreflist, newcandlist, tripletyperef, tripletypecand, baseidx):
+def getrefdict(
+    newreflist: List[str],
+    newcandlist: List[str],
+    tripletyperef: TripleEltType,
+    tripletypecand: TripleEltType,
+    baseidx: int,
+) -> Tuple[Literal["y", "n"], List[dict], List[dict], List[str]]:
+    """
+    :param newreflist: a list of token, where each token can be either
+        a specific token or of the form "FOUNDREF-X-Y" where X is the
+        index of the ngram where the token was matched and Y the
+        corresponding match in NEWCANDLIST.
+    :param newcandlist: a list of token.  Same as above except
+        "FOUNDCAND" replaces "FOUNDREF"
+
+    >>> getrefdict(newreflist, newcandlist, "SUB", "OBJ", 0)
+    ('y', [{'label': 'SUB', 'start': 0, 'end': 3}], [{'label': 'OBJ', 'start': 0, 'end': 1}, {'label': 'OBJ', 'start': 2, 'end': 2}], ['FOUNDREF-1-0', 'FOUNDREF-1-1', 'FOUNDREF-2-2', 'test'])
+    """
     try:
         # If some match is found with the reference
-        firstfoundidx = newcandlist.index([i for i in newcandlist if re.findall(r"^FOUNDCAND", i)][0])
+        firstfoundidx = newcandlist.index(
+            [i for i in newcandlist if re.findall(r"^FOUNDCAND", i)][0]
+        )
         candidatefound = "y"
     except IndexError:
         candidatefound = "n"
@@ -238,7 +279,9 @@ def getrefdict(newreflist, newcandlist, tripletyperef, tripletypecand, baseidx):
         if newcandlist[firstfoundidx].endswith("-0"):
             # Flag that some words can appear before the first match, and they are linked with the first candidate match
             beforelinked = "y"
-            firstcand = re.search(r"^(FOUNDCAND-\d+)-", newcandlist[firstfoundidx]).group(1)
+            firstcand = re.search(
+                r"^(FOUNDCAND-\d+)-", newcandlist[firstfoundidx]
+            ).group(1)
         else:
             beforelinked = "n"
 
@@ -246,12 +289,16 @@ def getrefdict(newreflist, newcandlist, tripletyperef, tripletypecand, baseidx):
         afterlinked = None
         # If there's more words after the last reference, link those to the last reference as well
         # If the last reference word is linked, but the last candidate word is not, one criterion of linking the last words is met
-        if (newreflist[-1].startswith("FOUNDREF")) and (not newcandlist[-1].startswith("FOUNDCAND")):
+        if (newreflist[-1].startswith("FOUNDREF")) and (
+            not newcandlist[-1].startswith("FOUNDCAND")
+        ):
             # If the last linked reference word is the last linked candidate word, the other criterion is also met.
             lastfound = [i for i in newcandlist if re.findall(r"^FOUNDCAND", i)][-1]
             candversion = newreflist[-1].replace("FOUNDREF", "FOUNDCAND")
             if lastfound == candversion:
-                lastfoundidx = newcandlist.index([i for i in newcandlist if re.findall(r"^FOUNDCAND", i)][-1])
+                lastfoundidx = newcandlist.index(
+                    [i for i in newcandlist if re.findall(r"^FOUNDCAND", i)][-1]
+                )
                 afterlinked = "y"
                 lastcand = re.search(r"^(FOUNDCAND-\d+)-", lastfound).group(1)
 
@@ -262,7 +309,12 @@ def getrefdict(newreflist, newcandlist, tripletyperef, tripletypecand, baseidx):
                 if (idx < firstfoundidx) and (beforelinked == "y"):
                     newcandlist[idx] = firstcand + "-LINKED"
                     beforelist.append(firstcand + "-LINKED")
-                elif (lastfoundidx != None) and (afterlinked != None) and (idx > lastfoundidx) and (afterlinked == "y"):
+                elif (
+                    (lastfoundidx != None)
+                    and (afterlinked != None)
+                    and (idx > lastfoundidx)
+                    and (afterlinked == "y")
+                ):
                     newcandlist[idx] = lastcand + "-LINKED"
                     afterlist.append(lastcand + "-LINKED")
                 else:
@@ -275,7 +327,13 @@ def getrefdict(newreflist, newcandlist, tripletyperef, tripletypecand, baseidx):
         refstart = len(beforelist)
         refend = (len(beforelist) + len(newreflist)) - 1
 
-        refdictlist = [{"label": tripletyperef, "start": baseidx + refstart, "end": baseidx + refend}]
+        refdictlist = [
+            {
+                "label": tripletyperef,
+                "start": baseidx + refstart,
+                "end": baseidx + refend,
+            }
+        ]
 
         totallist2 = [x.replace("FOUNDREF", "FOUNDCAND") for x in totallist]
 
@@ -285,46 +343,86 @@ def getrefdict(newreflist, newcandlist, tripletyperef, tripletypecand, baseidx):
         endidx = ""
         collecting = "n"
         for idx, candidate in enumerate(totallist2):
-            if (candidate.startswith("FOUNDCAND")) or (candidate.startswith("NOTFOUND")):
+            if (candidate.startswith("FOUNDCAND")) or (
+                candidate.startswith("NOTFOUND")
+            ):
                 collecting = "y"
                 curcan = re.search(r"^((.*?)-\d+)", candidate).group(1)
                 if curcan != currentcandidate:
                     if currentcandidate != "":
                         endidx = idx - 1
                         canddictlist.append(
-                            {"label": tripletypecand, "start": baseidx + beginidx, "end": baseidx + endidx}
+                            {
+                                "label": tripletypecand,
+                                "start": baseidx + beginidx,
+                                "end": baseidx + endidx,
+                            }
                         )
                     currentcandidate = curcan
                     beginidx = idx
 
                 if idx == len(totallist2) - 1:
                     endidx = idx
-                    canddictlist.append({"label": tripletypecand, "start": baseidx + beginidx, "end": baseidx + endidx})
+                    canddictlist.append(
+                        {
+                            "label": tripletypecand,
+                            "start": baseidx + beginidx,
+                            "end": baseidx + endidx,
+                        }
+                    )
             else:
                 if collecting == "y":
                     endidx = idx - 1
-                    canddictlist.append({"label": tripletypecand, "start": baseidx + beginidx, "end": baseidx + endidx})
+                    canddictlist.append(
+                        {
+                            "label": tripletypecand,
+                            "start": baseidx + beginidx,
+                            "end": baseidx + endidx,
+                        }
+                    )
 
     else:
         if len(newreflist) == 0:
             refdictlist = []
-            canddictlist = [{"label": tripletypecand, "start": baseidx, "end": baseidx + (len(newcandlist) - 1)}]
+            canddictlist = [
+                {
+                    "label": tripletypecand,
+                    "start": baseidx,
+                    "end": baseidx + (len(newcandlist) - 1),
+                }
+            ]
             totallist = newcandlist
         elif len(newcandlist) == 0:
             canddictlist = []
-            refdictlist = [{"label": tripletyperef, "start": baseidx, "end": baseidx + (len(newreflist) - 1)}]
+            refdictlist = [
+                {
+                    "label": tripletyperef,
+                    "start": baseidx,
+                    "end": baseidx + (len(newreflist) - 1),
+                }
+            ]
             totallist = refdictlist
         else:
             totallist = newreflist + newcandlist
-            refdictlist = [{"label": tripletyperef, "start": baseidx, "end": baseidx + (len(newreflist) - 1)}]
+            refdictlist = [
+                {
+                    "label": tripletyperef,
+                    "start": baseidx,
+                    "end": baseidx + (len(newreflist) - 1),
+                }
+            ]
             canddictlist = [
-                {"label": tripletypecand, "start": baseidx + len(newreflist), "end": baseidx + (len(totallist) - 1)}
+                {
+                    "label": tripletypecand,
+                    "start": baseidx + len(newreflist),
+                    "end": baseidx + (len(totallist) - 1),
+                }
             ]
 
     return candidatefound, refdictlist, canddictlist, totallist
 
 
-def evaluaterefcand(reference, candidate):
+def evaluaterefcand(reference: str, candidate: str) -> Tuple[dict, dict]:
     newreference = reference.split(" | ")
     newcandidate = candidate.split(" | ")
 
@@ -356,11 +454,19 @@ def evaluaterefcand(reference, candidate):
         refsub = newreference[idx]
         candsub = newcandidate[idx]
 
-        reflist = nltk.word_tokenize(refsub)
-        candlist = nltk.word_tokenize(candsub)
+        reflist: List[str] = nltk.word_tokenize(refsub)
+        candlist: List[str] = nltk.word_tokenize(candsub)
 
-        reflist = [x.lower() for x in reflist if re.search(r"^[" + re.escape(string.punctuation) + r"]+$", x) == None]
-        candlist = [x.lower() for x in candlist if re.search(r"^[" + re.escape(string.punctuation) + r"]$", x) == None]
+        reflist = [
+            x.lower()
+            for x in reflist
+            if re.search(r"^[" + re.escape(string.punctuation) + r"]+$", x) == None
+        ]
+        candlist = [
+            x.lower()
+            for x in candlist
+            if re.search(r"^[" + re.escape(string.punctuation) + r"]$", x) == None
+        ]
 
         newreflist = reflist.copy()
         newcandlist = candlist.copy()
@@ -368,7 +474,9 @@ def evaluaterefcand(reference, candidate):
         ngramlength = len(newcandlist)
         newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
         if idx == 0:
-            candidatefound, refdictlist, canddictlist, totallist = getrefdict(newreflist, newcandlist, "SUB", "SUB", 0)
+            candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+                newreflist, newcandlist, "SUB", "SUB", 0
+            )
             subjectfound = candidatefound
             subjectreflist = refdictlist.copy()
             subjectcandlist = canddictlist.copy()
@@ -383,7 +491,11 @@ def evaluaterefcand(reference, candidate):
             predicatetotallist = totallist.copy()
         else:
             candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-                newreflist, newcandlist, "OBJ", "OBJ", len(subjecttotallist) + len(predicatetotallist)
+                newreflist,
+                newcandlist,
+                "OBJ",
+                "OBJ",
+                len(subjecttotallist) + len(predicatetotallist),
             )
             objectfound = candidatefound
             objectreflist = refdictlist.copy()
@@ -400,8 +512,16 @@ def evaluaterefcand(reference, candidate):
         reflist = nltk.word_tokenize(refsub)
         candlist = nltk.word_tokenize(candsub)
 
-        reflist = [x.lower() for x in reflist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
-        candlist = [x.lower() for x in candlist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
+        reflist = [
+            x.lower()
+            for x in reflist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
+        candlist = [
+            x.lower()
+            for x in candlist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
 
         newreflist = reflist.copy()
         newcandlist = candlist.copy()
@@ -409,7 +529,9 @@ def evaluaterefcand(reference, candidate):
         ngramlength = len(newcandlist)
         newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
 
-        candidatefound, refdictlist, canddictlist, totallist = getrefdict(newreflist, newcandlist, "SUB", "OBJ", 0)
+        candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+            newreflist, newcandlist, "SUB", "OBJ", 0
+        )
 
         refsub = newreference[2]
         candsub = newcandidate[0]
@@ -417,8 +539,16 @@ def evaluaterefcand(reference, candidate):
         reflist = nltk.word_tokenize(refsub)
         candlist = nltk.word_tokenize(candsub)
 
-        reflist = [x.lower() for x in reflist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
-        candlist = [x.lower() for x in candlist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
+        reflist = [
+            x.lower()
+            for x in reflist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
+        candlist = [
+            x.lower()
+            for x in candlist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
 
         newreflist = reflist.copy()
         newcandlist = candlist.copy()
@@ -426,7 +556,11 @@ def evaluaterefcand(reference, candidate):
         ngramlength = len(newcandlist)
         newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
         candidatefound2, refdictlist2, canddictlist2, totallist2 = getrefdict(
-            newreflist, newcandlist, "OBJ", "SUB", len(totallist) + len(predicatetotallist)
+            newreflist,
+            newcandlist,
+            "OBJ",
+            "SUB",
+            len(totallist) + len(predicatetotallist),
         )
 
         if (candidatefound == "y") or (candidatefound2 == "y"):
@@ -452,15 +586,25 @@ def evaluaterefcand(reference, candidate):
             switchmatchfound = "n"
 
     # Then, let's try to switch subject and predicate
-    if ((subjectfound == "n") and (predicatefound == "n")) and (switchmatchfound == "n"):
+    if ((subjectfound == "n") and (predicatefound == "n")) and (
+        switchmatchfound == "n"
+    ):
         refsub = newreference[0]
         candsub = newcandidate[1]
 
         reflist = nltk.word_tokenize(refsub)
         candlist = nltk.word_tokenize(candsub)
 
-        reflist = [x.lower() for x in reflist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
-        candlist = [x.lower() for x in candlist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
+        reflist = [
+            x.lower()
+            for x in reflist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
+        candlist = [
+            x.lower()
+            for x in candlist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
 
         newreflist = reflist.copy()
         newcandlist = candlist.copy()
@@ -468,7 +612,9 @@ def evaluaterefcand(reference, candidate):
         ngramlength = len(newcandlist)
         newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
 
-        candidatefound, refdictlist, canddictlist, totallist = getrefdict(newreflist, newcandlist, "SUB", "PRED", 0)
+        candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+            newreflist, newcandlist, "SUB", "PRED", 0
+        )
 
         refsub = newreference[1]
         candsub = newcandidate[0]
@@ -476,8 +622,16 @@ def evaluaterefcand(reference, candidate):
         reflist = nltk.word_tokenize(refsub)
         candlist = nltk.word_tokenize(candsub)
 
-        reflist = [x.lower() for x in reflist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
-        candlist = [x.lower() for x in candlist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
+        reflist = [
+            x.lower()
+            for x in reflist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
+        candlist = [
+            x.lower()
+            for x in candlist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
 
         newreflist = reflist.copy()
         newcandlist = candlist.copy()
@@ -510,8 +664,16 @@ def evaluaterefcand(reference, candidate):
         reflist = nltk.word_tokenize(refsub)
         candlist = nltk.word_tokenize(candsub)
 
-        reflist = [x.lower() for x in reflist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
-        candlist = [x.lower() for x in candlist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
+        reflist = [
+            x.lower()
+            for x in reflist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
+        candlist = [
+            x.lower()
+            for x in candlist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
 
         newreflist = reflist.copy()
         newcandlist = candlist.copy()
@@ -529,8 +691,16 @@ def evaluaterefcand(reference, candidate):
         reflist = nltk.word_tokenize(refsub)
         candlist = nltk.word_tokenize(candsub)
 
-        reflist = [x.lower() for x in reflist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
-        candlist = [x.lower() for x in candlist if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None]
+        reflist = [
+            x.lower()
+            for x in reflist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
+        candlist = [
+            x.lower()
+            for x in candlist
+            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
+        ]
 
         newreflist = reflist.copy()
         newcandlist = candlist.copy()
@@ -539,7 +709,11 @@ def evaluaterefcand(reference, candidate):
         newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
 
         candidatefound2, refdictlist2, canddictlist2, totallist2 = getrefdict(
-            newreflist, newcandlist, "OBJ", "PRED", len(subjecttotallist) + len(totallist)
+            newreflist,
+            newcandlist,
+            "OBJ",
+            "PRED",
+            len(subjecttotallist) + len(totallist),
         )
 
         if (candidatefound == "y") or (candidatefound2 == "y"):
@@ -567,7 +741,7 @@ def evaluaterefcand(reference, candidate):
     return results, results_per_tag
 
 
-def calculateAllScores(newreflist, newcandlist):
+def calculateAllScores(newreflist: List[List[str]], newcandlist: List[List[str]]):
     totalsemevallist = []
     totalsemevallistpertag = []
 
@@ -579,12 +753,13 @@ def calculateAllScores(newreflist, newcandlist):
                 newcandlist[idx] = newcandlist[idx] + differencelist
             else:
                 newreflist[idx] = newreflist[idx] + differencelist
+            assert len(newreflist[idx]) == len(newcandlist[idx])
 
     for idx, candidate in enumerate(newcandlist):
         candidatesemeval = []
         candidatesemevalpertag = []
         for triple in candidate:
-            triplesemeval = []
+            triplesemeval: List[dict] = []
             triplesemevalpertag = []
             for reference in newreflist[idx]:
                 results, results_per_tag = evaluaterefcand(reference, triple)
@@ -600,7 +775,9 @@ def calculateAllScores(newreflist, newcandlist):
     return totalsemevallist, totalsemevallistpertag
 
 
-def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, newcandlist):
+def calculateSystemScore(
+    totalsemevallist, totalsemevallistpertag, newreflist, newcandlist
+):
     selectedsemevallist = []
     selectedsemevallistpertag = []
     selectedalignment = []
@@ -613,10 +790,15 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
         if len(newcandlist[idx]) > len(newreflist[idx]):
             # Get all permutations
             choosecands = list(
-                itertools.permutations([x[0] for x in enumerate(totalsemevallist[idx])], len(totalsemevallist[idx][0]))
+                itertools.permutations(
+                    [x[0] for x in enumerate(totalsemevallist[idx])],
+                    len(totalsemevallist[idx][0]),
+                )
             )
             # The permutations in different orders are not necessary: we only need one order without the number of candidates we're looking at
-            choosecands = set([tuple(sorted(i)) for i in choosecands])  # Sort inner list and then use set
+            choosecands = set(
+                [tuple(sorted(i)) for i in choosecands]
+            )  # Sort inner list and then use set
             choosecands = list(map(list, choosecands))  # Converting back to list
         else:
             # Otherwise, we're just going to score all candidates
@@ -625,12 +807,18 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
         # Get all permutations in which the scores can be combined
         if len(newcandlist[idx]) > len(newreflist[idx]):
             choosescore = list(
-                itertools.permutations([x[0] for x in enumerate(totalsemevallist[idx][0])], len(newreflist[idx]))
+                itertools.permutations(
+                    [x[0] for x in enumerate(totalsemevallist[idx][0])],
+                    len(newreflist[idx]),
+                )
             )
             choosescore = [list(x) for x in choosescore]
         else:
             choosescore = list(
-                itertools.permutations([x[0] for x in enumerate(totalsemevallist[idx][0])], len(newcandlist[idx]))
+                itertools.permutations(
+                    [x[0] for x in enumerate(totalsemevallist[idx][0])],
+                    len(newcandlist[idx]),
+                )
             )
             choosescore = [list(x) for x in choosescore]
 
@@ -660,7 +848,9 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
 
                 collectedsemeval.append(collectedscores)
 
-                assert combination[0][zc_idx] == zc[0] and combination[1][zc_idx] == zc[1]
+                assert (
+                    combination[0][zc_idx] == zc[0] and combination[1][zc_idx] == zc[1]
+                )
 
                 collectedsemevalpertag.append(totalsemevallistpertag[idx][zc[0]][zc[1]])
 
@@ -674,7 +864,9 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
                 }
 
         selectedsemevallist = selectedsemevallist + totaldict["semevallist"]
-        selectedsemevallistpertag = selectedsemevallistpertag + totaldict["semevalpertaglist"]
+        selectedsemevallistpertag = (
+            selectedsemevallistpertag + totaldict["semevalpertaglist"]
+        )
         selectedalignment.append(totaldict["combination"])
         selectedscores.append(totaldict["totalscore"] / len(candidate))
 
@@ -689,8 +881,12 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     enttypespurious = sum([x["ent_type"]["spurious"] for x in selectedsemevallist])
     enttypepossible = sum([x["ent_type"]["possible"] for x in selectedsemevallist])
     enttypeactual = sum([x["ent_type"]["actual"] for x in selectedsemevallist])
-    enttypeprecision = statistics.mean([x["ent_type"]["precision"] for x in selectedsemevallist])
-    enttyperecall = statistics.mean([x["ent_type"]["recall"] for x in selectedsemevallist])
+    enttypeprecision = statistics.mean(
+        [x["ent_type"]["precision"] for x in selectedsemevallist]
+    )
+    enttyperecall = statistics.mean(
+        [x["ent_type"]["recall"] for x in selectedsemevallist]
+    )
     enttypef1 = statistics.mean([x["ent_type"]["f1"] for x in selectedsemevallist])
     print(
         "Correct: "
@@ -723,8 +919,12 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     partialspurious = sum([x["partial"]["spurious"] for x in selectedsemevallist])
     partialpossible = sum([x["partial"]["possible"] for x in selectedsemevallist])
     partialactual = sum([x["partial"]["actual"] for x in selectedsemevallist])
-    partialprecision = statistics.mean([x["partial"]["precision"] for x in selectedsemevallist])
-    partialrecall = statistics.mean([x["partial"]["recall"] for x in selectedsemevallist])
+    partialprecision = statistics.mean(
+        [x["partial"]["precision"] for x in selectedsemevallist]
+    )
+    partialrecall = statistics.mean(
+        [x["partial"]["recall"] for x in selectedsemevallist]
+    )
     partialf1 = statistics.mean([x["partial"]["f1"] for x in selectedsemevallist])
     print(
         "Correct: "
@@ -757,7 +957,9 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     strictspurious = sum([x["strict"]["spurious"] for x in selectedsemevallist])
     strictpossible = sum([x["strict"]["possible"] for x in selectedsemevallist])
     strictactual = sum([x["strict"]["actual"] for x in selectedsemevallist])
-    strictprecision = statistics.mean([x["strict"]["precision"] for x in selectedsemevallist])
+    strictprecision = statistics.mean(
+        [x["strict"]["precision"] for x in selectedsemevallist]
+    )
     strictrecall = statistics.mean([x["strict"]["recall"] for x in selectedsemevallist])
     strictf1 = statistics.mean([x["strict"]["f1"] for x in selectedsemevallist])
     print(
@@ -791,7 +993,9 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     exactspurious = sum([x["exact"]["spurious"] for x in selectedsemevallist])
     exactpossible = sum([x["exact"]["possible"] for x in selectedsemevallist])
     exactactual = sum([x["exact"]["actual"] for x in selectedsemevallist])
-    exactprecision = statistics.mean([x["exact"]["precision"] for x in selectedsemevallist])
+    exactprecision = statistics.mean(
+        [x["exact"]["precision"] for x in selectedsemevallist]
+    )
     exactrecall = statistics.mean([x["exact"]["recall"] for x in selectedsemevallist])
     exactf1 = statistics.mean([x["exact"]["f1"] for x in selectedsemevallist])
     print(
@@ -822,16 +1026,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     print("Subjects")
     print("-----------------------------------------------------------------")
     print("Ent_type")
-    subenttypecorrect = sum([x["SUB"]["ent_type"]["correct"] for x in selectedsemevallistpertag])
-    subenttypeincorrect = sum([x["SUB"]["ent_type"]["incorrect"] for x in selectedsemevallistpertag])
-    subenttypepartial = sum([x["SUB"]["ent_type"]["partial"] for x in selectedsemevallistpertag])
-    subenttypemissed = sum([x["SUB"]["ent_type"]["missed"] for x in selectedsemevallistpertag])
-    subenttypespurious = sum([x["SUB"]["ent_type"]["spurious"] for x in selectedsemevallistpertag])
-    subenttypepossible = sum([x["SUB"]["ent_type"]["possible"] for x in selectedsemevallistpertag])
-    subenttypeactual = sum([x["SUB"]["ent_type"]["actual"] for x in selectedsemevallistpertag])
-    subenttypeprecision = statistics.mean([x["SUB"]["ent_type"]["precision"] for x in selectedsemevallistpertag])
-    subenttyperecall = statistics.mean([x["SUB"]["ent_type"]["recall"] for x in selectedsemevallistpertag])
-    subenttypef1 = statistics.mean([x["SUB"]["ent_type"]["f1"] for x in selectedsemevallistpertag])
+    subenttypecorrect = sum(
+        [x["SUB"]["ent_type"]["correct"] for x in selectedsemevallistpertag]
+    )
+    subenttypeincorrect = sum(
+        [x["SUB"]["ent_type"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    subenttypepartial = sum(
+        [x["SUB"]["ent_type"]["partial"] for x in selectedsemevallistpertag]
+    )
+    subenttypemissed = sum(
+        [x["SUB"]["ent_type"]["missed"] for x in selectedsemevallistpertag]
+    )
+    subenttypespurious = sum(
+        [x["SUB"]["ent_type"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    subenttypepossible = sum(
+        [x["SUB"]["ent_type"]["possible"] for x in selectedsemevallistpertag]
+    )
+    subenttypeactual = sum(
+        [x["SUB"]["ent_type"]["actual"] for x in selectedsemevallistpertag]
+    )
+    subenttypeprecision = statistics.mean(
+        [x["SUB"]["ent_type"]["precision"] for x in selectedsemevallistpertag]
+    )
+    subenttyperecall = statistics.mean(
+        [x["SUB"]["ent_type"]["recall"] for x in selectedsemevallistpertag]
+    )
+    subenttypef1 = statistics.mean(
+        [x["SUB"]["ent_type"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(subenttypecorrect)
@@ -856,16 +1080,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Partial")
-    subpartialcorrect = sum([x["SUB"]["partial"]["correct"] for x in selectedsemevallistpertag])
-    subpartialincorrect = sum([x["SUB"]["partial"]["incorrect"] for x in selectedsemevallistpertag])
-    subpartialpartial = sum([x["SUB"]["partial"]["partial"] for x in selectedsemevallistpertag])
-    subpartialmissed = sum([x["SUB"]["partial"]["missed"] for x in selectedsemevallistpertag])
-    subpartialspurious = sum([x["SUB"]["partial"]["spurious"] for x in selectedsemevallistpertag])
-    subpartialpossible = sum([x["SUB"]["partial"]["possible"] for x in selectedsemevallistpertag])
-    subpartialactual = sum([x["SUB"]["partial"]["actual"] for x in selectedsemevallistpertag])
-    subpartialprecision = statistics.mean([x["SUB"]["partial"]["precision"] for x in selectedsemevallistpertag])
-    subpartialrecall = statistics.mean([x["SUB"]["partial"]["recall"] for x in selectedsemevallistpertag])
-    subpartialf1 = statistics.mean([x["SUB"]["partial"]["f1"] for x in selectedsemevallistpertag])
+    subpartialcorrect = sum(
+        [x["SUB"]["partial"]["correct"] for x in selectedsemevallistpertag]
+    )
+    subpartialincorrect = sum(
+        [x["SUB"]["partial"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    subpartialpartial = sum(
+        [x["SUB"]["partial"]["partial"] for x in selectedsemevallistpertag]
+    )
+    subpartialmissed = sum(
+        [x["SUB"]["partial"]["missed"] for x in selectedsemevallistpertag]
+    )
+    subpartialspurious = sum(
+        [x["SUB"]["partial"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    subpartialpossible = sum(
+        [x["SUB"]["partial"]["possible"] for x in selectedsemevallistpertag]
+    )
+    subpartialactual = sum(
+        [x["SUB"]["partial"]["actual"] for x in selectedsemevallistpertag]
+    )
+    subpartialprecision = statistics.mean(
+        [x["SUB"]["partial"]["precision"] for x in selectedsemevallistpertag]
+    )
+    subpartialrecall = statistics.mean(
+        [x["SUB"]["partial"]["recall"] for x in selectedsemevallistpertag]
+    )
+    subpartialf1 = statistics.mean(
+        [x["SUB"]["partial"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(subpartialcorrect)
@@ -890,16 +1134,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Strict")
-    substrictcorrect = sum([x["SUB"]["strict"]["correct"] for x in selectedsemevallistpertag])
-    substrictincorrect = sum([x["SUB"]["strict"]["incorrect"] for x in selectedsemevallistpertag])
-    substrictpartial = sum([x["SUB"]["strict"]["partial"] for x in selectedsemevallistpertag])
-    substrictmissed = sum([x["SUB"]["strict"]["missed"] for x in selectedsemevallistpertag])
-    substrictspurious = sum([x["SUB"]["strict"]["spurious"] for x in selectedsemevallistpertag])
-    substrictpossible = sum([x["SUB"]["strict"]["possible"] for x in selectedsemevallistpertag])
-    substrictactual = sum([x["SUB"]["strict"]["actual"] for x in selectedsemevallistpertag])
-    substrictprecision = statistics.mean([x["SUB"]["strict"]["precision"] for x in selectedsemevallistpertag])
-    substrictrecall = statistics.mean([x["SUB"]["strict"]["recall"] for x in selectedsemevallistpertag])
-    substrictf1 = statistics.mean([x["SUB"]["strict"]["f1"] for x in selectedsemevallistpertag])
+    substrictcorrect = sum(
+        [x["SUB"]["strict"]["correct"] for x in selectedsemevallistpertag]
+    )
+    substrictincorrect = sum(
+        [x["SUB"]["strict"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    substrictpartial = sum(
+        [x["SUB"]["strict"]["partial"] for x in selectedsemevallistpertag]
+    )
+    substrictmissed = sum(
+        [x["SUB"]["strict"]["missed"] for x in selectedsemevallistpertag]
+    )
+    substrictspurious = sum(
+        [x["SUB"]["strict"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    substrictpossible = sum(
+        [x["SUB"]["strict"]["possible"] for x in selectedsemevallistpertag]
+    )
+    substrictactual = sum(
+        [x["SUB"]["strict"]["actual"] for x in selectedsemevallistpertag]
+    )
+    substrictprecision = statistics.mean(
+        [x["SUB"]["strict"]["precision"] for x in selectedsemevallistpertag]
+    )
+    substrictrecall = statistics.mean(
+        [x["SUB"]["strict"]["recall"] for x in selectedsemevallistpertag]
+    )
+    substrictf1 = statistics.mean(
+        [x["SUB"]["strict"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(substrictcorrect)
@@ -924,16 +1188,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Exact")
-    subexactcorrect = sum([x["SUB"]["exact"]["correct"] for x in selectedsemevallistpertag])
-    subexactincorrect = sum([x["SUB"]["exact"]["incorrect"] for x in selectedsemevallistpertag])
-    subexactpartial = sum([x["SUB"]["exact"]["partial"] for x in selectedsemevallistpertag])
-    subexactmissed = sum([x["SUB"]["exact"]["missed"] for x in selectedsemevallistpertag])
-    subexactspurious = sum([x["SUB"]["exact"]["spurious"] for x in selectedsemevallistpertag])
-    subexactpossible = sum([x["SUB"]["exact"]["possible"] for x in selectedsemevallistpertag])
-    subexactactual = sum([x["SUB"]["exact"]["actual"] for x in selectedsemevallistpertag])
-    subexactprecision = statistics.mean([x["SUB"]["exact"]["precision"] for x in selectedsemevallistpertag])
-    subexactrecall = statistics.mean([x["SUB"]["exact"]["recall"] for x in selectedsemevallistpertag])
-    subexactf1 = statistics.mean([x["SUB"]["exact"]["f1"] for x in selectedsemevallistpertag])
+    subexactcorrect = sum(
+        [x["SUB"]["exact"]["correct"] for x in selectedsemevallistpertag]
+    )
+    subexactincorrect = sum(
+        [x["SUB"]["exact"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    subexactpartial = sum(
+        [x["SUB"]["exact"]["partial"] for x in selectedsemevallistpertag]
+    )
+    subexactmissed = sum(
+        [x["SUB"]["exact"]["missed"] for x in selectedsemevallistpertag]
+    )
+    subexactspurious = sum(
+        [x["SUB"]["exact"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    subexactpossible = sum(
+        [x["SUB"]["exact"]["possible"] for x in selectedsemevallistpertag]
+    )
+    subexactactual = sum(
+        [x["SUB"]["exact"]["actual"] for x in selectedsemevallistpertag]
+    )
+    subexactprecision = statistics.mean(
+        [x["SUB"]["exact"]["precision"] for x in selectedsemevallistpertag]
+    )
+    subexactrecall = statistics.mean(
+        [x["SUB"]["exact"]["recall"] for x in selectedsemevallistpertag]
+    )
+    subexactf1 = statistics.mean(
+        [x["SUB"]["exact"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(subexactcorrect)
@@ -960,16 +1244,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     print("Predicates")
     print("-----------------------------------------------------------------")
     print("Ent_type")
-    predenttypecorrect = sum([x["PRED"]["ent_type"]["correct"] for x in selectedsemevallistpertag])
-    predenttypeincorrect = sum([x["PRED"]["ent_type"]["incorrect"] for x in selectedsemevallistpertag])
-    predenttypepartial = sum([x["PRED"]["ent_type"]["partial"] for x in selectedsemevallistpertag])
-    predenttypemissed = sum([x["PRED"]["ent_type"]["missed"] for x in selectedsemevallistpertag])
-    predenttypespurious = sum([x["PRED"]["ent_type"]["spurious"] for x in selectedsemevallistpertag])
-    predenttypepossible = sum([x["PRED"]["ent_type"]["possible"] for x in selectedsemevallistpertag])
-    predenttypeactual = sum([x["PRED"]["ent_type"]["actual"] for x in selectedsemevallistpertag])
-    predenttypeprecision = statistics.mean([x["PRED"]["ent_type"]["precision"] for x in selectedsemevallistpertag])
-    predenttyperecall = statistics.mean([x["PRED"]["ent_type"]["recall"] for x in selectedsemevallistpertag])
-    predenttypef1 = statistics.mean([x["PRED"]["ent_type"]["f1"] for x in selectedsemevallistpertag])
+    predenttypecorrect = sum(
+        [x["PRED"]["ent_type"]["correct"] for x in selectedsemevallistpertag]
+    )
+    predenttypeincorrect = sum(
+        [x["PRED"]["ent_type"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    predenttypepartial = sum(
+        [x["PRED"]["ent_type"]["partial"] for x in selectedsemevallistpertag]
+    )
+    predenttypemissed = sum(
+        [x["PRED"]["ent_type"]["missed"] for x in selectedsemevallistpertag]
+    )
+    predenttypespurious = sum(
+        [x["PRED"]["ent_type"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    predenttypepossible = sum(
+        [x["PRED"]["ent_type"]["possible"] for x in selectedsemevallistpertag]
+    )
+    predenttypeactual = sum(
+        [x["PRED"]["ent_type"]["actual"] for x in selectedsemevallistpertag]
+    )
+    predenttypeprecision = statistics.mean(
+        [x["PRED"]["ent_type"]["precision"] for x in selectedsemevallistpertag]
+    )
+    predenttyperecall = statistics.mean(
+        [x["PRED"]["ent_type"]["recall"] for x in selectedsemevallistpertag]
+    )
+    predenttypef1 = statistics.mean(
+        [x["PRED"]["ent_type"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(predenttypecorrect)
@@ -994,16 +1298,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Partial")
-    predpartialcorrect = sum([x["PRED"]["partial"]["correct"] for x in selectedsemevallistpertag])
-    predpartialincorrect = sum([x["PRED"]["partial"]["incorrect"] for x in selectedsemevallistpertag])
-    predpartialpartial = sum([x["PRED"]["partial"]["partial"] for x in selectedsemevallistpertag])
-    predpartialmissed = sum([x["PRED"]["partial"]["missed"] for x in selectedsemevallistpertag])
-    predpartialspurious = sum([x["PRED"]["partial"]["spurious"] for x in selectedsemevallistpertag])
-    predpartialpossible = sum([x["PRED"]["partial"]["possible"] for x in selectedsemevallistpertag])
-    predpartialactual = sum([x["PRED"]["partial"]["actual"] for x in selectedsemevallistpertag])
-    predpartialprecision = statistics.mean([x["PRED"]["partial"]["precision"] for x in selectedsemevallistpertag])
-    predpartialrecall = statistics.mean([x["PRED"]["partial"]["recall"] for x in selectedsemevallistpertag])
-    predpartialf1 = statistics.mean([x["PRED"]["partial"]["f1"] for x in selectedsemevallistpertag])
+    predpartialcorrect = sum(
+        [x["PRED"]["partial"]["correct"] for x in selectedsemevallistpertag]
+    )
+    predpartialincorrect = sum(
+        [x["PRED"]["partial"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    predpartialpartial = sum(
+        [x["PRED"]["partial"]["partial"] for x in selectedsemevallistpertag]
+    )
+    predpartialmissed = sum(
+        [x["PRED"]["partial"]["missed"] for x in selectedsemevallistpertag]
+    )
+    predpartialspurious = sum(
+        [x["PRED"]["partial"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    predpartialpossible = sum(
+        [x["PRED"]["partial"]["possible"] for x in selectedsemevallistpertag]
+    )
+    predpartialactual = sum(
+        [x["PRED"]["partial"]["actual"] for x in selectedsemevallistpertag]
+    )
+    predpartialprecision = statistics.mean(
+        [x["PRED"]["partial"]["precision"] for x in selectedsemevallistpertag]
+    )
+    predpartialrecall = statistics.mean(
+        [x["PRED"]["partial"]["recall"] for x in selectedsemevallistpertag]
+    )
+    predpartialf1 = statistics.mean(
+        [x["PRED"]["partial"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(predpartialcorrect)
@@ -1028,16 +1352,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Strict")
-    predstrictcorrect = sum([x["PRED"]["strict"]["correct"] for x in selectedsemevallistpertag])
-    predstrictincorrect = sum([x["PRED"]["strict"]["incorrect"] for x in selectedsemevallistpertag])
-    predstrictpartial = sum([x["PRED"]["strict"]["partial"] for x in selectedsemevallistpertag])
-    predstrictmissed = sum([x["PRED"]["strict"]["missed"] for x in selectedsemevallistpertag])
-    predstrictspurious = sum([x["PRED"]["strict"]["spurious"] for x in selectedsemevallistpertag])
-    predstrictpossible = sum([x["PRED"]["strict"]["possible"] for x in selectedsemevallistpertag])
-    predstrictactual = sum([x["PRED"]["strict"]["actual"] for x in selectedsemevallistpertag])
-    predstrictprecision = statistics.mean([x["PRED"]["strict"]["precision"] for x in selectedsemevallistpertag])
-    predstrictrecall = statistics.mean([x["PRED"]["strict"]["recall"] for x in selectedsemevallistpertag])
-    predstrictf1 = statistics.mean([x["PRED"]["strict"]["f1"] for x in selectedsemevallistpertag])
+    predstrictcorrect = sum(
+        [x["PRED"]["strict"]["correct"] for x in selectedsemevallistpertag]
+    )
+    predstrictincorrect = sum(
+        [x["PRED"]["strict"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    predstrictpartial = sum(
+        [x["PRED"]["strict"]["partial"] for x in selectedsemevallistpertag]
+    )
+    predstrictmissed = sum(
+        [x["PRED"]["strict"]["missed"] for x in selectedsemevallistpertag]
+    )
+    predstrictspurious = sum(
+        [x["PRED"]["strict"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    predstrictpossible = sum(
+        [x["PRED"]["strict"]["possible"] for x in selectedsemevallistpertag]
+    )
+    predstrictactual = sum(
+        [x["PRED"]["strict"]["actual"] for x in selectedsemevallistpertag]
+    )
+    predstrictprecision = statistics.mean(
+        [x["PRED"]["strict"]["precision"] for x in selectedsemevallistpertag]
+    )
+    predstrictrecall = statistics.mean(
+        [x["PRED"]["strict"]["recall"] for x in selectedsemevallistpertag]
+    )
+    predstrictf1 = statistics.mean(
+        [x["PRED"]["strict"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(predstrictcorrect)
@@ -1062,16 +1406,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Exact")
-    predexactcorrect = sum([x["PRED"]["exact"]["correct"] for x in selectedsemevallistpertag])
-    predexactincorrect = sum([x["PRED"]["exact"]["incorrect"] for x in selectedsemevallistpertag])
-    predexactpartial = sum([x["PRED"]["exact"]["partial"] for x in selectedsemevallistpertag])
-    predexactmissed = sum([x["PRED"]["exact"]["missed"] for x in selectedsemevallistpertag])
-    predexactspurious = sum([x["PRED"]["exact"]["spurious"] for x in selectedsemevallistpertag])
-    predexactpossible = sum([x["PRED"]["exact"]["possible"] for x in selectedsemevallistpertag])
-    predexactactual = sum([x["PRED"]["exact"]["actual"] for x in selectedsemevallistpertag])
-    predexactprecision = statistics.mean([x["PRED"]["exact"]["precision"] for x in selectedsemevallistpertag])
-    predexactrecall = statistics.mean([x["PRED"]["exact"]["recall"] for x in selectedsemevallistpertag])
-    predexactf1 = statistics.mean([x["PRED"]["exact"]["f1"] for x in selectedsemevallistpertag])
+    predexactcorrect = sum(
+        [x["PRED"]["exact"]["correct"] for x in selectedsemevallistpertag]
+    )
+    predexactincorrect = sum(
+        [x["PRED"]["exact"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    predexactpartial = sum(
+        [x["PRED"]["exact"]["partial"] for x in selectedsemevallistpertag]
+    )
+    predexactmissed = sum(
+        [x["PRED"]["exact"]["missed"] for x in selectedsemevallistpertag]
+    )
+    predexactspurious = sum(
+        [x["PRED"]["exact"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    predexactpossible = sum(
+        [x["PRED"]["exact"]["possible"] for x in selectedsemevallistpertag]
+    )
+    predexactactual = sum(
+        [x["PRED"]["exact"]["actual"] for x in selectedsemevallistpertag]
+    )
+    predexactprecision = statistics.mean(
+        [x["PRED"]["exact"]["precision"] for x in selectedsemevallistpertag]
+    )
+    predexactrecall = statistics.mean(
+        [x["PRED"]["exact"]["recall"] for x in selectedsemevallistpertag]
+    )
+    predexactf1 = statistics.mean(
+        [x["PRED"]["exact"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(predexactcorrect)
@@ -1098,16 +1462,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     print("Objects")
     print("-----------------------------------------------------------------")
     print("Ent_type")
-    objenttypecorrect = sum([x["OBJ"]["ent_type"]["correct"] for x in selectedsemevallistpertag])
-    objenttypeincorrect = sum([x["OBJ"]["ent_type"]["incorrect"] for x in selectedsemevallistpertag])
-    objenttypepartial = sum([x["OBJ"]["ent_type"]["partial"] for x in selectedsemevallistpertag])
-    objenttypemissed = sum([x["OBJ"]["ent_type"]["missed"] for x in selectedsemevallistpertag])
-    objenttypespurious = sum([x["OBJ"]["ent_type"]["spurious"] for x in selectedsemevallistpertag])
-    objenttypepossible = sum([x["OBJ"]["ent_type"]["possible"] for x in selectedsemevallistpertag])
-    objenttypeactual = sum([x["OBJ"]["ent_type"]["actual"] for x in selectedsemevallistpertag])
-    objenttypeprecision = statistics.mean([x["OBJ"]["ent_type"]["precision"] for x in selectedsemevallistpertag])
-    objenttyperecall = statistics.mean([x["OBJ"]["ent_type"]["recall"] for x in selectedsemevallistpertag])
-    objenttypef1 = statistics.mean([x["OBJ"]["ent_type"]["f1"] for x in selectedsemevallistpertag])
+    objenttypecorrect = sum(
+        [x["OBJ"]["ent_type"]["correct"] for x in selectedsemevallistpertag]
+    )
+    objenttypeincorrect = sum(
+        [x["OBJ"]["ent_type"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    objenttypepartial = sum(
+        [x["OBJ"]["ent_type"]["partial"] for x in selectedsemevallistpertag]
+    )
+    objenttypemissed = sum(
+        [x["OBJ"]["ent_type"]["missed"] for x in selectedsemevallistpertag]
+    )
+    objenttypespurious = sum(
+        [x["OBJ"]["ent_type"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    objenttypepossible = sum(
+        [x["OBJ"]["ent_type"]["possible"] for x in selectedsemevallistpertag]
+    )
+    objenttypeactual = sum(
+        [x["OBJ"]["ent_type"]["actual"] for x in selectedsemevallistpertag]
+    )
+    objenttypeprecision = statistics.mean(
+        [x["OBJ"]["ent_type"]["precision"] for x in selectedsemevallistpertag]
+    )
+    objenttyperecall = statistics.mean(
+        [x["OBJ"]["ent_type"]["recall"] for x in selectedsemevallistpertag]
+    )
+    objenttypef1 = statistics.mean(
+        [x["OBJ"]["ent_type"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(objenttypecorrect)
@@ -1132,16 +1516,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Partial")
-    objpartialcorrect = sum([x["OBJ"]["partial"]["correct"] for x in selectedsemevallistpertag])
-    objpartialincorrect = sum([x["OBJ"]["partial"]["incorrect"] for x in selectedsemevallistpertag])
-    objpartialpartial = sum([x["OBJ"]["partial"]["partial"] for x in selectedsemevallistpertag])
-    objpartialmissed = sum([x["OBJ"]["partial"]["missed"] for x in selectedsemevallistpertag])
-    objpartialspurious = sum([x["OBJ"]["partial"]["spurious"] for x in selectedsemevallistpertag])
-    objpartialpossible = sum([x["OBJ"]["partial"]["possible"] for x in selectedsemevallistpertag])
-    objpartialactual = sum([x["OBJ"]["partial"]["actual"] for x in selectedsemevallistpertag])
-    objpartialprecision = statistics.mean([x["OBJ"]["partial"]["precision"] for x in selectedsemevallistpertag])
-    objpartialrecall = statistics.mean([x["OBJ"]["partial"]["recall"] for x in selectedsemevallistpertag])
-    objpartialf1 = statistics.mean([x["OBJ"]["partial"]["f1"] for x in selectedsemevallistpertag])
+    objpartialcorrect = sum(
+        [x["OBJ"]["partial"]["correct"] for x in selectedsemevallistpertag]
+    )
+    objpartialincorrect = sum(
+        [x["OBJ"]["partial"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    objpartialpartial = sum(
+        [x["OBJ"]["partial"]["partial"] for x in selectedsemevallistpertag]
+    )
+    objpartialmissed = sum(
+        [x["OBJ"]["partial"]["missed"] for x in selectedsemevallistpertag]
+    )
+    objpartialspurious = sum(
+        [x["OBJ"]["partial"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    objpartialpossible = sum(
+        [x["OBJ"]["partial"]["possible"] for x in selectedsemevallistpertag]
+    )
+    objpartialactual = sum(
+        [x["OBJ"]["partial"]["actual"] for x in selectedsemevallistpertag]
+    )
+    objpartialprecision = statistics.mean(
+        [x["OBJ"]["partial"]["precision"] for x in selectedsemevallistpertag]
+    )
+    objpartialrecall = statistics.mean(
+        [x["OBJ"]["partial"]["recall"] for x in selectedsemevallistpertag]
+    )
+    objpartialf1 = statistics.mean(
+        [x["OBJ"]["partial"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(objpartialcorrect)
@@ -1166,16 +1570,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Strict")
-    objstrictcorrect = sum([x["OBJ"]["strict"]["correct"] for x in selectedsemevallistpertag])
-    objstrictincorrect = sum([x["OBJ"]["strict"]["incorrect"] for x in selectedsemevallistpertag])
-    objstrictpartial = sum([x["OBJ"]["strict"]["partial"] for x in selectedsemevallistpertag])
-    objstrictmissed = sum([x["OBJ"]["strict"]["missed"] for x in selectedsemevallistpertag])
-    objstrictspurious = sum([x["OBJ"]["strict"]["spurious"] for x in selectedsemevallistpertag])
-    objstrictpossible = sum([x["OBJ"]["strict"]["possible"] for x in selectedsemevallistpertag])
-    objstrictactual = sum([x["OBJ"]["strict"]["actual"] for x in selectedsemevallistpertag])
-    objstrictprecision = statistics.mean([x["OBJ"]["strict"]["precision"] for x in selectedsemevallistpertag])
-    objstrictrecall = statistics.mean([x["OBJ"]["strict"]["recall"] for x in selectedsemevallistpertag])
-    objstrictf1 = statistics.mean([x["OBJ"]["strict"]["f1"] for x in selectedsemevallistpertag])
+    objstrictcorrect = sum(
+        [x["OBJ"]["strict"]["correct"] for x in selectedsemevallistpertag]
+    )
+    objstrictincorrect = sum(
+        [x["OBJ"]["strict"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    objstrictpartial = sum(
+        [x["OBJ"]["strict"]["partial"] for x in selectedsemevallistpertag]
+    )
+    objstrictmissed = sum(
+        [x["OBJ"]["strict"]["missed"] for x in selectedsemevallistpertag]
+    )
+    objstrictspurious = sum(
+        [x["OBJ"]["strict"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    objstrictpossible = sum(
+        [x["OBJ"]["strict"]["possible"] for x in selectedsemevallistpertag]
+    )
+    objstrictactual = sum(
+        [x["OBJ"]["strict"]["actual"] for x in selectedsemevallistpertag]
+    )
+    objstrictprecision = statistics.mean(
+        [x["OBJ"]["strict"]["precision"] for x in selectedsemevallistpertag]
+    )
+    objstrictrecall = statistics.mean(
+        [x["OBJ"]["strict"]["recall"] for x in selectedsemevallistpertag]
+    )
+    objstrictf1 = statistics.mean(
+        [x["OBJ"]["strict"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(objstrictcorrect)
@@ -1200,16 +1624,36 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
     )
     print("-----------------------------------------------------------------")
     print("Exact")
-    objexactcorrect = sum([x["OBJ"]["exact"]["correct"] for x in selectedsemevallistpertag])
-    objexactincorrect = sum([x["OBJ"]["exact"]["incorrect"] for x in selectedsemevallistpertag])
-    objexactpartial = sum([x["OBJ"]["exact"]["partial"] for x in selectedsemevallistpertag])
-    objexactmissed = sum([x["OBJ"]["exact"]["missed"] for x in selectedsemevallistpertag])
-    objexactspurious = sum([x["OBJ"]["exact"]["spurious"] for x in selectedsemevallistpertag])
-    objexactpossible = sum([x["OBJ"]["exact"]["possible"] for x in selectedsemevallistpertag])
-    objexactactual = sum([x["OBJ"]["exact"]["actual"] for x in selectedsemevallistpertag])
-    objexactprecision = statistics.mean([x["OBJ"]["exact"]["precision"] for x in selectedsemevallistpertag])
-    objexactrecall = statistics.mean([x["OBJ"]["exact"]["recall"] for x in selectedsemevallistpertag])
-    objexactf1 = statistics.mean([x["OBJ"]["exact"]["f1"] for x in selectedsemevallistpertag])
+    objexactcorrect = sum(
+        [x["OBJ"]["exact"]["correct"] for x in selectedsemevallistpertag]
+    )
+    objexactincorrect = sum(
+        [x["OBJ"]["exact"]["incorrect"] for x in selectedsemevallistpertag]
+    )
+    objexactpartial = sum(
+        [x["OBJ"]["exact"]["partial"] for x in selectedsemevallistpertag]
+    )
+    objexactmissed = sum(
+        [x["OBJ"]["exact"]["missed"] for x in selectedsemevallistpertag]
+    )
+    objexactspurious = sum(
+        [x["OBJ"]["exact"]["spurious"] for x in selectedsemevallistpertag]
+    )
+    objexactpossible = sum(
+        [x["OBJ"]["exact"]["possible"] for x in selectedsemevallistpertag]
+    )
+    objexactactual = sum(
+        [x["OBJ"]["exact"]["actual"] for x in selectedsemevallistpertag]
+    )
+    objexactprecision = statistics.mean(
+        [x["OBJ"]["exact"]["precision"] for x in selectedsemevallistpertag]
+    )
+    objexactrecall = statistics.mean(
+        [x["OBJ"]["exact"]["recall"] for x in selectedsemevallistpertag]
+    )
+    objexactf1 = statistics.mean(
+        [x["OBJ"]["exact"]["f1"] for x in selectedsemevallistpertag]
+    )
     print(
         "Correct: "
         + str(objexactcorrect)
@@ -1233,10 +1677,15 @@ def calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, n
         + str(objexactf1)
     )
     print("-----------------------------------------------------------------")
-    return selectedsemevallist, selectedsemevallistpertag, selectedalignment, selectedscores
+    return (
+        selectedsemevallist,
+        selectedsemevallistpertag,
+        selectedalignment,
+        selectedscores,
+    )
 
 
-def calculateExactTripleScore(reflist, candlist):
+def calculateExactTripleScore(reflist: List[List[str]], candlist: List[List[str]]):
     newreflist = [[string.lower() for string in sublist] for sublist in reflist]
     newcandlist = [[string.lower() for string in sublist] for sublist in candlist]
     # First get all the classes by combining the triples in the candidatelist and referencelist
@@ -1254,14 +1703,20 @@ def calculateExactTripleScore(reflist, candlist):
 
     print("Full triple scores")
     print("-----------------------------------------------------------------")
-    print("Precision: " + str(precision) + " Recall: " + str(recall) + "\nF1: " + str(f1))
+    print(
+        "Precision: " + str(precision) + " Recall: " + str(recall) + "\nF1: " + str(f1)
+    )
 
 
 def main(reffile, candfile):
     reflist, newreflist = getRefs(reffile)
     candlist, newcandlist = getCands(candfile)
-    totalsemevallist, totalsemevallistpertag = calculateAllScores(newreflist, newcandlist)
-    calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, newcandlist)
+    totalsemevallist, totalsemevallistpertag = calculateAllScores(
+        newreflist, newcandlist
+    )
+    calculateSystemScore(
+        totalsemevallist, totalsemevallistpertag, newreflist, newcandlist
+    )
     calculateExactTripleScore(reflist, candlist)
 
 
@@ -1272,5 +1727,7 @@ if __name__ == "__main__":
     parser.add_argument("--reference")
     parser.add_argument("--max_length_diff", default=None)
     args = parser.parse_args()
-    result_xml_path, gold_xml_path = convert_to_xml(args.edc_output, args.reference, args.max_length_diff)
+    result_xml_path, gold_xml_path = convert_to_xml(
+        args.edc_output, args.reference, args.max_length_diff
+    )
     main(gold_xml_path, result_xml_path)
