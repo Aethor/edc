@@ -8,9 +8,10 @@ from typing import Literal, Tuple, List
 from bs4 import BeautifulSoup
 import os
 import regex as re
+import functools as ft
+from operator import add
 import itertools
 import statistics
-import sys
 from nervaluate import Evaluator
 import nltk
 from nltk.util import ngrams
@@ -24,7 +25,7 @@ import ast
 import xml.etree.ElementTree as ET
 
 
-TripleEltType = Literal["SUB", "PRED", "OBJ"]
+AttrType = Literal["SUB", "PRED", "OBJ"]
 yn = Literal["y", "n"]
 
 
@@ -208,8 +209,15 @@ def nonrefwords(
 
     :param newreflist: a list of tokens
     :param newcandlist: a list of tokens
-    :param foundnum:
+    :param foundnum: recursive argument, starts at 1
     :param ngramlength:
+
+    :return: two list of strings:
+        - one for NEWREFLIST. Each token is either one of the original tokens
+          (not matched) or of the form FOUNDREF-X-Y where X is index of the
+          matched ngram and Y the index of the token in that ngram.
+        - one for NEWCANDLIST. Similarly as above, but with matched tokens of
+          the form FOUNDCAND-X-Y
     """
     while ngramlength > 0:
         # Get a list of all the ngrams of that size
@@ -246,8 +254,8 @@ def nonrefwords(
 def getrefdict(
     newreflist: List[str],
     newcandlist: List[str],
-    tripletyperef: TripleEltType,
-    tripletypecand: TripleEltType,
+    tripletyperef: AttrType,
+    tripletypecand: AttrType,
     baseidx: int,
 ) -> Tuple[Literal["y", "n"], List[dict], List[dict], List[str]]:
     """
@@ -258,8 +266,20 @@ def getrefdict(
     :param newcandlist: a list of token.  Same as above except
         "FOUNDCAND" replaces "FOUNDREF"
 
-    >>> getrefdict(newreflist, newcandlist, "SUB", "OBJ", 0)
+    >>> getrefdict(['FOUNDREF-1-0', 'FOUNDREF-1-1', 'FOUNDREF-2-2', 'test'], ['FOUNDCAND-1-0', 'FOUNDCAND-1-1', 'FOUNDCAND-2-2'], "SUB", "OBJ", 0)
     ('y', [{'label': 'SUB', 'start': 0, 'end': 3}], [{'label': 'OBJ', 'start': 0, 'end': 1}, {'label': 'OBJ', 'start': 2, 'end': 2}], ['FOUNDREF-1-0', 'FOUNDREF-1-1', 'FOUNDREF-2-2', 'test'])
+
+    >>> getrefdict(['FOUNDREF-1-0', 'FOUNDREF-1-1', 'FOUNDREF-1-2', 'test'], ['FOUNDCAND-1-0', 'FOUNDCAND-1-1', 'FOUNDCAND-1-2'], "SUB", "OBJ", 0)
+    ('y', [{'label': 'SUB', 'start': 0, 'end': 3}], [{'label': 'OBJ', 'start': 0, 'end': 2}], ['FOUNDREF-1-0', 'FOUNDREF-1-1', 'FOUNDREF-1-2', 'test'])
+
+    >>> getrefdict(["test"], ["quetzalcoatl", "quetzalcoatl"], "SUB", "OBJ", 0)
+    ('n', [{'label': 'SUB', 'start': 0, 'end': 1}], [{'label': 'OBJ', 'start': 2, 'end': 3}], ['test', 'goddammit', 'quetzalcoatl', 'quetzalcoatl'])
+
+    :return: a quadruple:
+        - whether or not there was at least a partial match between ref and cand tokens
+        -
+        -
+        -
     """
     try:
         # If some match is found with the reference
@@ -422,326 +442,154 @@ def getrefdict(
     return candidatefound, refdictlist, canddictlist, totallist
 
 
-def evaluaterefcand(reference: str, candidate: str) -> Tuple[dict, dict]:
+def cleanup_tokens(tokens: list[str]) -> list[str]:
+    return [
+        x.lower()
+        for x in tokens
+        if re.search(r"^[" + re.escape(string.punctuation) + r"]+$", x) == None
+    ]
+
+
+def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
     newreference = reference.split(" | ")
     newcandidate = candidate.split(" | ")
+
+    attr_types: list[AttrType] = ["SUB", "PRED", "OBJ"]
+    attr2index = {k: i for i, k in enumerate(attr_types)}
 
     # Make sure that reference or candidate aren't '' values originally.
     if (len(newreference) > 1) and (len(newcandidate) > 1):
         indextriple = newreference
     elif len(newreference) == 1:
-        indextriple = newcandidate
         newreference = ["", "", ""]
     else:
         indextriple = newreference
         newcandidate = ["", "", ""]
 
-    subjectreflist = None
-    subjectcandlist = None
-    subjecttotallist = None
-    predicatereflist = None
-    predicatecandlist = None
-    predicatetotallist = None
-    objectreflist = None
-    objectcandlist = None
-    objecttotallist = None
-    subjectfound = ""
-    predicatefound = ""
-    objectfound = ""
+    refdictlist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    canddictlist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    totaldictlist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    found: dict[AttrType, yn] = {"SUB": "n", "PRED": "n", "OBJ": "n"}
 
-    for idx, attrib in enumerate(indextriple):
-        # Let's go over each attribute of the triple one by one
-        refsub = newreference[idx]
-        candsub = newcandidate[idx]
+    # Let's go over each attribute of the triple one by one
+    for attr_i, attr_type in enumerate(attr_types):
+        refsub = newreference[attr_i]
+        candsub = newcandidate[attr_i]
 
-        reflist: List[str] = nltk.word_tokenize(refsub)
-        candlist: List[str] = nltk.word_tokenize(candsub)
+        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
+        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
 
-        reflist = [
-            x.lower()
-            for x in reflist
-            if re.search(r"^[" + re.escape(string.punctuation) + r"]+$", x) == None
-        ]
-        candlist = [
-            x.lower()
-            for x in candlist
-            if re.search(r"^[" + re.escape(string.punctuation) + r"]$", x) == None
-        ]
-
-        newreflist = reflist.copy()
-        newcandlist = candlist.copy()
         # Start with an ngram the full number of words in the reference
-        ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
-        if idx == 0:
-            candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-                newreflist, newcandlist, "SUB", "SUB", 0
-            )
-            subjectfound = candidatefound
-            subjectreflist = refdictlist.copy()
-            subjectcandlist = canddictlist.copy()
-            subjecttotallist = totallist.copy()
-        elif idx == 1:
-            candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-                newreflist, newcandlist, "PRED", "PRED", len(subjecttotallist)
-            )
-            predicatefound = candidatefound
-            predicatereflist = refdictlist.copy()
-            predicatecandlist = canddictlist.copy()
-            predicatetotallist = totallist.copy()
-        else:
-            candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-                newreflist,
-                newcandlist,
-                "OBJ",
-                "OBJ",
-                len(subjecttotallist) + len(predicatetotallist),
-            )
-            objectfound = candidatefound
-            objectreflist = refdictlist.copy()
-            objectcandlist = canddictlist.copy()
-            objecttotallist = totallist.copy()
-
-    switchmatchfound = "n"
-    # If no matches were found for two or more attributes, we are going to try and compare different attributes to each other.
-    # First let's try to match the candidate subject and reference object (and vice versa)
-    if (subjectfound == "n") and (objectfound == "n"):
-        refsub = newreference[0]
-        candsub = newcandidate[2]
-
-        reflist = nltk.word_tokenize(refsub)
-        candlist = nltk.word_tokenize(candsub)
-
-        reflist = [
-            x.lower()
-            for x in reflist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-        candlist = [
-            x.lower()
-            for x in candlist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-
-        newreflist = reflist.copy()
-        newcandlist = candlist.copy()
-        # Start with an ngram the full number of words in the candidate
-        ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
+        ngramlength = len(candlist)
+        reflist, candlist = nonrefwords(reflist, candlist, 1, ngramlength)
 
         candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-            newreflist, newcandlist, "SUB", "OBJ", 0
+            reflist,
+            candlist,
+            attr_type,
+            attr_type,
+            sum(len(lst) for lst in totaldictlist_dict.values()),
+        )
+        found[attr_type] = candidatefound
+        refdictlist_dict[attr_type] = refdictlist
+        canddictlist_dict[attr_type] = canddictlist
+        totaldictlist_dict[attr_type] = totallist
+
+    # If no matches were found for two or more attributes, we are
+    # going to try and compare different attributes to each other.
+    swap_pairs = [
+        ("SUB", "OBJ"),
+        ("SUB", "PRED"),
+        ("PRED", "OBJ"),
+    ]
+    for attr1, attr2 in swap_pairs:
+        if (found[attr1] == "y") or (found[attr2] == "y"):
+            continue
+
+        refsub = newreference[attr2index[attr1]]
+        candsub = newcandidate[attr2index[attr2]]
+
+        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
+        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
+
+        # Start with an ngram the full number of words in the candidate
+        ngramlength = len(candlist)
+        newreflist, newcandlist = nonrefwords(
+            reflist.copy(), candlist.copy(), 1, ngramlength
+        )
+        offset = sum(
+            len(lst)
+            for attr, lst in totaldictlist_dict.items()
+            if attr2index[attr] < attr2index[attr1] and not attr == attr2
+        )
+        candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+            newreflist, newcandlist, attr1, attr2, offset
         )
 
-        refsub = newreference[2]
-        candsub = newcandidate[0]
+        refsub = newreference[attr2index[attr2]]
+        candsub = newcandidate[attr2index[attr1]]
 
-        reflist = nltk.word_tokenize(refsub)
-        candlist = nltk.word_tokenize(candsub)
+        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
+        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
 
-        reflist = [
-            x.lower()
-            for x in reflist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-        candlist = [
-            x.lower()
-            for x in candlist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-
-        newreflist = reflist.copy()
-        newcandlist = candlist.copy()
         # Start with an ngram the full number of words in the candidate
         ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
+        newreflist, newcandlist = nonrefwords(
+            reflist.copy(), candlist.copy(), 1, ngramlength
+        )
+        offset = len(totallist) + sum(
+            len(lst)
+            for attr, lst in totaldictlist_dict.items()
+            if attr2index[attr] < attr2index[attr2] and not attr == attr1
+        )
         candidatefound2, refdictlist2, canddictlist2, totallist2 = getrefdict(
-            newreflist,
-            newcandlist,
-            "OBJ",
-            "SUB",
-            len(totallist) + len(predicatetotallist),
+            newreflist, newcandlist, attr2, attr1, offset
         )
 
         if (candidatefound == "y") or (candidatefound2 == "y"):
-            subjectfound = candidatefound
-            subjectreflist = refdictlist.copy()
-            subjectcandlist = canddictlist.copy()
-            subjecttotallist = totallist.copy()
-            objectfound = candidatefound2
-            objectreflist = refdictlist2.copy()
-            objectcandlist = canddictlist2.copy()
-            objecttotallist = totallist2.copy()
+            found[attr1] = candidatefound
+            refdictlist_dict[attr1] = refdictlist
+            canddictlist_dict[attr1] = canddictlist
+            totaldictlist_dict[attr1] = totallist
 
-            candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-                newreflist, newcandlist, "PRED", "PRED", len(subjecttotallist)
-            )
-            predicatefound = candidatefound
-            predicatereflist = refdictlist.copy()
-            predicatecandlist = canddictlist.copy()
-            predicatetotallist = totallist.copy()
+            found[attr2] = candidatefound2
+            refdictlist_dict[attr2] = refdictlist2
+            canddictlist_dict[attr2] = canddictlist2
+            totaldictlist_dict[attr2] = totallist2
 
-            switchmatchfound = "y"
-        else:
-            switchmatchfound = "n"
+            attrs_between: list[AttrType] = [
+                a
+                for a in attr_types
+                if attr2index[a] < attr2index[attr2]
+                and attr2index[a] > attr2index[attr1]
+            ]
+            for attr in set(attrs_between):
+                offset = sum(
+                    len(lst)
+                    for other_attr, lst in totaldictlist_dict.items()
+                    if attr2index[other_attr] < attr2index[attr]
+                )
+                candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+                    newreflist, newcandlist, attr, attr, offset
+                )
+                found[attr] = candidatefound
+                refdictlist_dict[attr] = refdictlist
+                canddictlist_dict[attr] = canddictlist
+                totaldictlist_dict[attr] = totallist
 
-    # Then, let's try to switch subject and predicate
-    if ((subjectfound == "n") and (predicatefound == "n")) and (
-        switchmatchfound == "n"
-    ):
-        refsub = newreference[0]
-        candsub = newcandidate[1]
+            break
 
-        reflist = nltk.word_tokenize(refsub)
-        candlist = nltk.word_tokenize(candsub)
-
-        reflist = [
-            x.lower()
-            for x in reflist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-        candlist = [
-            x.lower()
-            for x in candlist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-
-        newreflist = reflist.copy()
-        newcandlist = candlist.copy()
-        # Start with an ngram the full number of words in the candidate
-        ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
-
-        candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-            newreflist, newcandlist, "SUB", "PRED", 0
-        )
-
-        refsub = newreference[1]
-        candsub = newcandidate[0]
-
-        reflist = nltk.word_tokenize(refsub)
-        candlist = nltk.word_tokenize(candsub)
-
-        reflist = [
-            x.lower()
-            for x in reflist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-        candlist = [
-            x.lower()
-            for x in candlist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-
-        newreflist = reflist.copy()
-        newcandlist = candlist.copy()
-        # Start with an ngram the full number of words in the candidate
-        ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
-
-        candidatefound2, refdictlist2, canddictlist2, totallist2 = getrefdict(
-            newreflist, newcandlist, "PRED", "SUB", len(totallist)
-        )
-
-        if (candidatefound == "y") or (candidatefound2 == "y"):
-            subjectfound = candidatefound
-            subjectreflist = refdictlist.copy()
-            subjectcandlist = canddictlist.copy()
-            subjecttotallist = totallist.copy()
-            predicatefound = candidatefound2
-            predicatereflist = refdictlist2.copy()
-            predicatecandlist = canddictlist2.copy()
-            predicatetotallist = totallist2.copy()
-            switchmatchfound = "y"
-        else:
-            switchmatchfound = "n"
-
-    # Finally, let's try to switch predicate and object
-    if ((predicatefound == "n") and (objectfound == "n")) and (switchmatchfound == "n"):
-        refsub = newreference[1]
-        candsub = newcandidate[2]
-
-        reflist = nltk.word_tokenize(refsub)
-        candlist = nltk.word_tokenize(candsub)
-
-        reflist = [
-            x.lower()
-            for x in reflist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-        candlist = [
-            x.lower()
-            for x in candlist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-
-        newreflist = reflist.copy()
-        newcandlist = candlist.copy()
-        # Start with an ngram the full number of words in the candidate
-        ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
-
-        candidatefound, refdictlist, canddictlist, totallist = getrefdict(
-            newreflist, newcandlist, "PRED", "OBJ", len(subjecttotallist)
-        )
-
-        refsub = newreference[2]
-        candsub = newcandidate[1]
-
-        reflist = nltk.word_tokenize(refsub)
-        candlist = nltk.word_tokenize(candsub)
-
-        reflist = [
-            x.lower()
-            for x in reflist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-        candlist = [
-            x.lower()
-            for x in candlist
-            if re.search(r"[" + re.escape(string.punctuation) + r"]", x) == None
-        ]
-
-        newreflist = reflist.copy()
-        newcandlist = candlist.copy()
-        # Start with an ngram the full number of words in the candidate
-        ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(newreflist, newcandlist, 1, ngramlength)
-
-        candidatefound2, refdictlist2, canddictlist2, totallist2 = getrefdict(
-            newreflist,
-            newcandlist,
-            "OBJ",
-            "PRED",
-            len(subjecttotallist) + len(totallist),
-        )
-
-        if (candidatefound == "y") or (candidatefound2 == "y"):
-            predicatefound = candidatefound
-            predicatereflist = refdictlist.copy()
-            predicatecandlist = canddictlist.copy()
-            predicatetotallist = totallist.copy()
-            objectfound = candidatefound2
-            objectreflist = refdictlist2.copy()
-            objectcandlist = canddictlist2.copy()
-            objecttotallist = totallist2.copy()
-            switchmatchfound = "y"
-        else:
-            switchmatchfound = "n"
-
-    allrefdict = subjectreflist + predicatereflist + objectreflist
-    allcanddict = subjectcandlist + predicatecandlist + objectcandlist
-    alltotallist = subjecttotallist + predicatetotallist + objecttotallist
-
-    evaluator = Evaluator([allrefdict], [allcanddict], tags=["SUB", "PRED", "OBJ"])
+    allrefdict = list(ft.reduce(add, [refdictlist_dict[attr] for attr in attr_types]))
+    allcanddict = list(ft.reduce(add, [canddictlist_dict[attr] for attr in attr_types]))
 
     # Returns overall metrics and metrics for each tag
+    evaluator = Evaluator([allrefdict], [allcanddict], tags=attr_types)
     results, results_per_tag = evaluator.evaluate()
 
     return results, results_per_tag
 
 
-def calculateAllScores(newreflist: List[List[str]], newcandlist: List[List[str]]):
+def calculateAllScores(newreflist: list[list[str]], newcandlist: list[list[str]]):
     totalsemevallist = []
     totalsemevallistpertag = []
 
