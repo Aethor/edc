@@ -137,7 +137,7 @@ def getRefs(filepath) -> Tuple[List[List[str]], List[List[str]]]:
     for entry in allreftriples:
         newtriples = []
         for triple in entry:
-            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r"([a-z])([A-Z])", r"\g<1> \g<2>", triple).lower()
             newtriple = re.sub(r"_", " ", newtriple).lower()
             newtriple = re.sub(r"\s+", " ", newtriple).lower()
 
@@ -173,7 +173,7 @@ def getCands(filepath) -> Tuple[List[List[str]], List[List[str]]]:
     for entry in allcandtriples:
         newtriples = []
         for triple in entry:
-            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r"([a-z])([A-Z])", r"\g<1> \g<2>", triple).lower()
             newtriple = re.sub(r"_", " ", newtriple).lower()
             newtriple = re.sub(r"\s+", " ", newtriple).lower()
             newtriple = unidecode(newtriple)
