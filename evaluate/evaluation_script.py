@@ -451,49 +451,45 @@ def cleanup_tokens(tokens: list[str]) -> list[str]:
 
 
 def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
-    newreference = reference.split(" | ")
-    newcandidate = candidate.split(" | ")
+    ref = reference.split(" | ")
+    cand = candidate.split(" | ")
 
     attr_types: list[AttrType] = ["SUB", "PRED", "OBJ"]
     attr2index = {k: i for i, k in enumerate(attr_types)}
 
     # Make sure that reference or candidate aren't '' values originally.
-    if (len(newreference) > 1) and (len(newcandidate) > 1):
-        indextriple = newreference
-    elif len(newreference) == 1:
-        newreference = ["", "", ""]
-    else:
-        indextriple = newreference
-        newcandidate = ["", "", ""]
+    if len(ref) < 1 or len(cand) < 1:
+        if len(ref) == 1:
+            ref = ["", "", ""]
+        else:
+            cand = ["", "", ""]
 
-    refdictlist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    canddictlist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    totaldictlist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    refdicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    canddicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    totallist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
     found: dict[AttrType, yn] = {"SUB": "n", "PRED": "n", "OBJ": "n"}
 
     # Let's go over each attribute of the triple one by one
     for attr_i, attr_type in enumerate(attr_types):
-        refsub = newreference[attr_i]
-        candsub = newcandidate[attr_i]
+        refsub = ref[attr_i]
+        candsub = cand[attr_i]
 
         reflist = cleanup_tokens(nltk.word_tokenize(refsub))
         candlist = cleanup_tokens(nltk.word_tokenize(candsub))
 
-        # Start with an ngram the full number of words in the reference
-        ngramlength = len(candlist)
-        reflist, candlist = nonrefwords(reflist, candlist, 1, ngramlength)
+        reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
 
-        candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+        candidatefound, refdicts, canddicts, totallist = getrefdict(
             reflist,
             candlist,
             attr_type,
             attr_type,
-            sum(len(lst) for lst in totaldictlist_dict.values()),
+            sum(len(lst) for lst in totallist_dict.values()),
         )
         found[attr_type] = candidatefound
-        refdictlist_dict[attr_type] = refdictlist
-        canddictlist_dict[attr_type] = canddictlist
-        totaldictlist_dict[attr_type] = totallist
+        refdicts_dict[attr_type] = refdicts
+        canddicts_dict[attr_type] = canddicts
+        totallist_dict[attr_type] = totallist
 
     # If no matches were found for two or more attributes, we are
     # going to try and compare different attributes to each other.
@@ -506,57 +502,48 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
         if (found[attr1] == "y") or (found[attr2] == "y"):
             continue
 
-        refsub = newreference[attr2index[attr1]]
-        candsub = newcandidate[attr2index[attr2]]
-
+        refsub = ref[attr2index[attr1]]
+        candsub = cand[attr2index[attr2]]
         reflist = cleanup_tokens(nltk.word_tokenize(refsub))
         candlist = cleanup_tokens(nltk.word_tokenize(candsub))
 
-        # Start with an ngram the full number of words in the candidate
-        ngramlength = len(candlist)
-        newreflist, newcandlist = nonrefwords(
-            reflist.copy(), candlist.copy(), 1, ngramlength
-        )
+        newreflist, newcandlist = nonrefwords(reflist, candlist, 1, len(candlist))
         offset = sum(
             len(lst)
-            for attr, lst in totaldictlist_dict.items()
+            for attr, lst in totallist_dict.items()
             if attr2index[attr] < attr2index[attr1] and not attr == attr2
         )
-        candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+        candidatefound, refdicts, canddicts, totallist = getrefdict(
             newreflist, newcandlist, attr1, attr2, offset
         )
 
-        refsub = newreference[attr2index[attr2]]
-        candsub = newcandidate[attr2index[attr1]]
-
+        refsub = ref[attr2index[attr2]]
+        candsub = cand[attr2index[attr1]]
         reflist = cleanup_tokens(nltk.word_tokenize(refsub))
         candlist = cleanup_tokens(nltk.word_tokenize(candsub))
 
-        # Start with an ngram the full number of words in the candidate
-        ngramlength = len(newcandlist)
-        newreflist, newcandlist = nonrefwords(
-            reflist.copy(), candlist.copy(), 1, ngramlength
-        )
+        newreflist, newcandlist = nonrefwords(reflist, candlist, 1, len(candlist))
         offset = len(totallist) + sum(
             len(lst)
-            for attr, lst in totaldictlist_dict.items()
+            for attr, lst in totallist_dict.items()
             if attr2index[attr] < attr2index[attr2] and not attr == attr1
         )
-        candidatefound2, refdictlist2, canddictlist2, totallist2 = getrefdict(
+        candidatefound2, refdicts2, canddicts2, totallist2 = getrefdict(
             newreflist, newcandlist, attr2, attr1, offset
         )
 
         if (candidatefound == "y") or (candidatefound2 == "y"):
             found[attr1] = candidatefound
-            refdictlist_dict[attr1] = refdictlist
-            canddictlist_dict[attr1] = canddictlist
-            totaldictlist_dict[attr1] = totallist
+            refdicts_dict[attr1] = refdicts
+            canddicts_dict[attr1] = canddicts
+            totallist_dict[attr1] = totallist
 
             found[attr2] = candidatefound2
-            refdictlist_dict[attr2] = refdictlist2
-            canddictlist_dict[attr2] = canddictlist2
-            totaldictlist_dict[attr2] = totallist2
+            refdicts_dict[attr2] = refdicts2
+            canddicts_dict[attr2] = canddicts2
+            totallist_dict[attr2] = totallist2
 
+            # update entities that were "sandwiched" between attr1 and attr2
             attrs_between: list[AttrType] = [
                 a
                 for a in attr_types
@@ -566,21 +553,21 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
             for attr in set(attrs_between):
                 offset = sum(
                     len(lst)
-                    for other_attr, lst in totaldictlist_dict.items()
+                    for other_attr, lst in totallist_dict.items()
                     if attr2index[other_attr] < attr2index[attr]
                 )
-                candidatefound, refdictlist, canddictlist, totallist = getrefdict(
+                candidatefound, refdicts, canddicts, totallist = getrefdict(
                     newreflist, newcandlist, attr, attr, offset
                 )
                 found[attr] = candidatefound
-                refdictlist_dict[attr] = refdictlist
-                canddictlist_dict[attr] = canddictlist
-                totaldictlist_dict[attr] = totallist
+                refdicts_dict[attr] = refdicts
+                canddicts_dict[attr] = canddicts
+                totallist_dict[attr] = totallist
 
             break
 
-    allrefdict = list(ft.reduce(add, [refdictlist_dict[attr] for attr in attr_types]))
-    allcanddict = list(ft.reduce(add, [canddictlist_dict[attr] for attr in attr_types]))
+    allrefdict = list(ft.reduce(add, [refdicts_dict[attr] for attr in attr_types]))
+    allcanddict = list(ft.reduce(add, [canddicts_dict[attr] for attr in attr_types]))
 
     # Returns overall metrics and metrics for each tag
     evaluator = Evaluator([allrefdict], [allcanddict], tags=attr_types)
