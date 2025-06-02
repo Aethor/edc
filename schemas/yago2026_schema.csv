@@ -5,9 +5,9 @@ startActor,The subject entity started having an actor specified by the object en
 actor,The subject entity has an actor specified by the object entity
 endActor,The subject entity ended its association with the actor specified by the object entity
 affiliation,The subject entity is affiliated by the organization specified by the object entity
-startAlumniOf,The subject entity started being an alumni of the organization specified by the object entity
+startAlumniOf,The subject entity started a student or member position the organization specified by the object entity
 alumniOf,The subject entity is an alumni of the organization specified by the object entity
-endAlumniOf,The subject entity ended its alumni relationship with the organization specified by the object entity
+endAlumniOf,The subject entity ended its student or member position with the organization specified by the object entity
 startAppearsIn,The subject entity started appearing in the creative work specified by the object entity
 appearsIn,The subject entity appears in the creative work specified by the object entity
 endAppearsIn,The subject entity no longer appears in the creative work specified by the object entity
@@ -25,7 +25,9 @@ children,The subject entity is the parent of the object entity
 startConferredBy,The subject entity started being conferred by the object entity
 conferredBy,The subject entity is conferred by the object entity
 endConferredBy,The subject entity is no longer conferred by the object entity
-contentLocation,The subject entity depicts or describe the location specified by the object entity
+startContentLocation,The subject entity started depicting or describing the location specified by the object entity
+contentLocation,The subject entity depicts or describes the location specified by the object entity
+endContentLocation,The subject no longer depicts or describes the location specified by the object entity
 startDirector,The subject entity's director started being the object entity
 director,The subject entity's director is the object entity
 endDirector,The subject entity's director is no longer the object entity
@@ -59,9 +61,7 @@ location,The subject entity is at the location specified by the object entity
 endLocation,The subject entity no longer is at the location specified by the object entity
 locationCreated,The subject entity was created at the location specified by the object entity
 lowestPoint,The lowest point of the subject entity is the object entity
-startLyricist,The lyrics of the subject entity started being written by the object entity
 lyricist,The lyrics of the subject entity were written by the object entity
-endLyricist,The lyrics of the subject entity are no longer written by the object entity
 startManufacturer,The subject entity started being manufactured by the organization specified by the object entity
 manufacturer,The subject entity is manufactured by the organization specified by the object entity
 endManufacturer,The subject entity is no longer manufactured by the organization specified by the object entity
@@ -71,12 +71,18 @@ endMaterial,The subject entity is no longer made of the material specified by th
 startMemberOf,The subject entity started being a member of the organization specified by the object entity
 memberOf,The subject entity is a member of the organization specified by the object entity
 endMemberOf,The subject entity no longer is a member of the organization specified by the object entity
+startMusicBy,The music of the subject entity started being composed by the object entity
 musicBy,The music of the subject entity was composed by the object entity
+endMusicBy,The music of the subject entity is no longer composed by the object entity
 startNationality,The subject entity acquired the nationality specified by the object entity
 nationality,The subject entity has the nationality specified by the object entity
 endNationality,The subject entity lost the nationality specified by the object entity
+startNeighbors,The subject entity started neighboring the object entity
 neighbors,The subject entity is neighboring the object entity
+endNeighbors,The subject entity is no longer neighboring the object entity
+startNotableWork,The subject entity started working on its its notable work specified by the object entity
 notableWork,The subject entity has a notable work specified by the object entity
+endNotableWork,The subject entity no longer works on its notable work specified by the object entity
 officialLanguage,The subject entity has an official language specified by the object entity
 startOrganizer,The subject entity started being organized by the object entity
 organizer,The subject entity is organized by the object entity
@@ -102,7 +108,9 @@ endProductionCompany,The subject entity is not longer produced by the organizati
 startPublisher,The subject entity started being published by the object entity
 publisher,The subject entity was published by the object entity
 endPublisher,The subject entity is no longer published by the object entity
-recordLabel,The subject entity was released by the label specified by the object entity
+startRecordLabel,The subject artist or band started operating under the label specified by the object entity
+recordLabel,The subject artist or band operates under the label specified by the object entity
+endRecordLabel,The subject artist or band no longer operates under the label specifie by the object entity
 startReplaces,The subject entity started replacing the object entity
 replaces,The subject entity replaces the object entity
 endReplaces,The subject entity no longer replaces the object entity
