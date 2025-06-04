@@ -4,7 +4,7 @@ from sklearn.exceptions import UndefinedMetricWarning
 
 # ignore all UndefinedMetricWarning warnings
 simplefilter(action="ignore", category=UndefinedMetricWarning)
-from typing import Literal, Tuple, List
+from typing import Literal, Tuple, List, TypedDict
 from bs4 import BeautifulSoup
 import os
 import regex as re
@@ -25,7 +25,8 @@ import ast
 import xml.etree.ElementTree as ET
 
 
-AttrType = Literal["SUB", "PRED", "OBJ"]
+AttrType = Literal["SUB", "PRED", "OBJ", "TS"]
+ProdigySpan = TypedDict("ProdigySpan", {"label": str, "start": int, "end": int})
 yn = Literal["y", "n"]
 
 
@@ -257,7 +258,7 @@ def getrefdict(
     tripletyperef: AttrType,
     tripletypecand: AttrType,
     baseidx: int,
-) -> Tuple[Literal["y", "n"], List[dict], List[dict], List[str]]:
+) -> Tuple[Literal["y", "n"], list[ProdigySpan], list[ProdigySpan], List[str]]:
     """
     :param newreflist: a list of token, where each token can be either
         a specific token or of the form "FOUNDREF-X-Y" where X is the
@@ -450,11 +451,29 @@ def cleanup_tokens(tokens: list[str]) -> list[str]:
     ]
 
 
+def spans_to_tags(prodigy_spans: list[list[ProdigySpan]]) -> list[str]:
+    max_index = 0
+    for spans in prodigy_spans:
+        for span in spans:
+            max_index = max(max_index, span["end"])
+
+    tags = ["O"] * max_index
+    for spans in prodigy_spans:
+        for span in spans:
+            span_len = span["end"] - span["start"] + 1
+            span_tags = [f"B-{span['label']}"] + (span_len - 1) * [f"I-{span['label']}"]
+            tags[span["start"] : span["end"] + 1] = span_tags
+
+    return tags
+
+
 def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
     ref = reference.split(" | ")
     cand = candidate.split(" | ")
+    assert len(ref) == len(cand)
+    assert len(ref) >= 3 and len(ref) <= 4
 
-    attr_types: list[AttrType] = ["SUB", "PRED", "OBJ"]
+    attr_types: list[AttrType] = ["SUB", "PRED", "OBJ", "TS"][: len(ref)]  # type: ignore
     attr2index = {k: i for i, k in enumerate(attr_types)}
 
     # Make sure that reference or candidate aren't '' values originally.
@@ -464,10 +483,10 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
         else:
             cand = ["", "", ""]
 
-    refdicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    canddicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    totallist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    found: dict[AttrType, yn] = {"SUB": "n", "PRED": "n", "OBJ": "n"}
+    refdicts_dict: dict[AttrType, list] = {attr: [] for attr in attr_types}
+    canddicts_dict: dict[AttrType, list] = {attr: [] for attr in attr_types}
+    totallist_dict: dict[AttrType, list] = {attr: [] for attr in attr_types}
+    found: dict[AttrType, yn] = {attr: "n" for attr in attr_types}
 
     # Let's go over each attribute of the triple one by one
     for attr_i, attr_type in enumerate(attr_types):
@@ -493,14 +512,24 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
 
     # If no matches were found for two or more attributes, we are
     # going to try and compare different attributes to each other.
-    swap_pairs = [
+    swap_pairs: list[tuple[AttrType, AttrType]] = [
         ("SUB", "OBJ"),
         ("SUB", "PRED"),
         ("PRED", "OBJ"),
     ]
+    if len(ref) == 4:
+        swap_pairs += [
+            ("SUB", "TS"),
+            ("OBJ", "TS"),
+            ("PRED", "TS"),
+        ]  # type: ignore
+    attr_to_swapped: dict[AttrType, AttrType] = {attr: attr for attr in attr_types}
     for attr1, attr2 in swap_pairs:
         if (found[attr1] == "y") or (found[attr2] == "y"):
             continue
+
+        attr1 = attr_to_swapped[attr1]
+        attr2 = attr_to_swapped[attr2]
 
         refsub = ref[attr2index[attr1]]
         candsub = cand[attr2index[attr2]]
@@ -556,15 +585,28 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
                     for other_attr, lst in totallist_dict.items()
                     if attr2index[other_attr] < attr2index[attr]
                 )
+
+                attr_i = attr2index[attr]
+                refsub = ref[attr_i]
+                candsub = cand[attr_i]
+
+                reflist = cleanup_tokens(nltk.word_tokenize(refsub))
+                candlist = cleanup_tokens(nltk.word_tokenize(candsub))
+
+                reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
+
                 candidatefound, refdicts, canddicts, totallist = getrefdict(
-                    newreflist, newcandlist, attr, attr, offset
+                    reflist, candlist, attr, attr, offset
                 )
                 found[attr] = candidatefound
                 refdicts_dict[attr] = refdicts
                 canddicts_dict[attr] = canddicts
                 totallist_dict[attr] = totallist
 
-            break
+            attr_to_swapped[attr1] = attr2
+            attr_to_swapped[attr2] = attr1
+
+            # break
 
     allrefdict = list(ft.reduce(add, [refdicts_dict[attr] for attr in attr_types]))
     allcanddict = list(ft.reduce(add, [canddicts_dict[attr] for attr in attr_types]))
