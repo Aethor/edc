@@ -4,8 +4,7 @@ from nervaluate import Evaluator
 from evaluate.evaluation_script import getrefdict, nonrefwords
 
 
-def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
-    """The original version of evaluaterefcand, used to test the new version in evaluation_script.py (see tests/test_evaluaterefcand.py)"""
+def evaluaterefcand_core(reference: str, candidate: str) -> tuple[list, list]:
     newreference = reference.split(" | ")
     newcandidate = candidate.split(" | ")
 
@@ -316,6 +315,13 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
     allcanddict = subjectcandlist + predicatecandlist + objectcandlist
     alltotallist = subjecttotallist + predicatetotallist + objecttotallist
 
+    return allrefdict, allcanddict
+
+
+def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
+    """The original version of evaluaterefcand, used to test the new version in evaluation_script.py (see tests/test_evaluaterefcand.py)"""
+
+    allrefdict, allcanddict = evaluaterefcand_core(reference, candidate)
     evaluator = Evaluator([allrefdict], [allcanddict], tags=["SUB", "PRED", "OBJ"])
 
     # Returns overall metrics and metrics for each tag

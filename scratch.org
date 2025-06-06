@@ -1,0 +1,584 @@
+#+TITLE: Extending WebNLG2020 script to quadruples
+#+AUTHOR: Arthur Amalvy
+#+PROPERTY: header-args:Python :python ./.venv/bin/python3
+
+* WebNLG inner working
+
+How do the WebNLG script works? Its heart is the ~evaluaterefcand~
+function, which is complex. It takes as input two triples, ~reference~
+and ~candidate~, each in the following format:
+
+#+begin_src python
+"subject | predicate | object"
+#+end_src
+
+Then, it tries to match elements of these triples together. In the
+simplest case, elements correspond to each other:
+
+#+begin_src python
+reference = "Linus Torvalds | creator | Linux"
+candidate = "Linus Torvalds | creator | Linux"
+#+end_src
+
+But they can also be swapped:
+
+#+begin_src python
+# note how subject and object are swapped in the candidate triple!
+reference = "Linus Torvalds | creator | Linux"
+candidate = "Linux          | creator | Linus Torvalds"
+#+end_src
+
+in that case, the metric will still attribute partial score depending
+on the setting. It is also possible to have a partial match for an
+element:
+
+#+begin_src python
+# the reference subject partially matches the candidate object
+reference = "Linus Torvalds | creator | Linux"
+candidate = "Linux          | creator | Torvalds"
+#+end_src
+
+
+** NERValuate
+
+** The core of everything: ~evaluaterefcand~
+
+Basically, what does ~evaluaterefcand~ do?
+
+1. Go over the natural pairs of elements (=(SUB, SUBj)=, =(PRED,
+   PRED)=, =(OBJ, OBJ)=) and try to find a match.
+2. For each pair, see if there is at least a partial match by
+   iterating over n-grams. Convert these match into NER prediction
+   (more on that later?) in prodigy format.
+4. Repeat 1-2 for swapped pairs where an element has no match (=(SUB,
+   OBJ), (SUB, PRED), (PRED, OBJ)=). If we have matchs for these
+   pairs, we keep their corresponding NER tags.
+5. finally, evaluation is done using [[https://github.com/MantisAI/nervaluate][nervaluate]].
+
+** A simplified evaluaterefcand implementation
+
+#+begin_src python :session *python*
+from typing import Literal
+import nltk, re, string
+from nltk.util import ngrams
+from evaluate.evaluation_script import getrefdict, nonrefwords
+
+AttrType = Literal["SUB", "PRED", "OBJ"]
+yn = Literal["y", "n"]
+
+def cleanup_tokens(tokens: list[str]) -> list[str]:
+    return [
+        x.lower()
+        for x in tokens
+        if re.search(r"^[" + re.escape(string.punctuation) + r"]+$", x) == None
+    ]
+
+def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
+    ref = reference.split(" | ")
+    cand = candidate.split(" | ")
+
+    attr_types: list[AttrType] = ["SUB", "PRED", "OBJ"]
+    attr2index = {k: i for i, k in enumerate(attr_types)}
+
+    # Make sure that reference or candidate aren't '' values originally.
+    if len(ref) < 1 or len(cand) < 1:
+        if len(ref) == 1:
+            ref = ["", "", ""]
+        else:
+            cand = ["", "", ""]
+
+    refdicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    canddicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    totallist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
+    found: dict[AttrType, yn] = {"SUB": "n", "PRED": "n", "OBJ": "n"}
+
+    # Let's go over each attribute of the triple one by one
+    for attr_i, attr_type in enumerate(attr_types):
+        refsub = ref[attr_i]
+        candsub = cand[attr_i]
+
+        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
+        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
+
+        reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
+
+        candidatefound, refdicts, canddicts, totallist = getrefdict(
+            reflist,
+            candlist,
+            attr_type,
+            attr_type,
+            sum(len(lst) for lst in totallist_dict.values()),
+        )
+        found[attr_type] = candidatefound
+        refdicts_dict[attr_type] = refdicts
+        canddicts_dict[attr_type] = canddicts
+        totallist_dict[attr_type] = totallist
+
+    # If no matches were found for two or more attributes, we are
+    # going to try and compare different attributes to each other.
+    swap_pairs = [
+        ("SUB", "OBJ"),
+        ("SUB", "PRED"),
+        ("PRED", "OBJ"),
+    ]
+    for attr1, attr2 in swap_pairs:
+        if (found[attr1] == "y") or (found[attr2] == "y"):
+            continue
+
+        refsub = ref[attr2index[attr1]]
+        candsub = cand[attr2index[attr2]]
+        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
+        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
+
+        newreflist, newcandlist = nonrefwords(reflist, candlist, 1, len(candlist))
+        offset = sum(
+            len(lst)
+            for attr, lst in totallist_dict.items()
+            if attr2index[attr] < attr2index[attr1] and not attr == attr2
+        )
+        candidatefound, refdicts, canddicts, totallist = getrefdict(
+            newreflist, newcandlist, attr1, attr2, offset
+        )
+
+        refsub = ref[attr2index[attr2]]
+        candsub = cand[attr2index[attr1]]
+        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
+        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
+
+        newreflist, newcandlist = nonrefwords(reflist, candlist, 1, len(candlist))
+        offset = len(totallist) + sum(
+            len(lst)
+            for attr, lst in totallist_dict.items()
+            if attr2index[attr] < attr2index[attr2] and not attr == attr1
+        )
+        candidatefound2, refdicts2, canddicts2, totallist2 = getrefdict(
+            newreflist, newcandlist, attr2, attr1, offset
+        )
+
+        if (candidatefound == "y") or (candidatefound2 == "y"):
+            found[attr1] = candidatefound
+            refdicts_dict[attr1] = refdicts
+            canddicts_dict[attr1] = canddicts
+            totallist_dict[attr1] = totallist
+
+            found[attr2] = candidatefound2
+            refdicts_dict[attr2] = refdicts2
+            canddicts_dict[attr2] = canddicts2
+            totallist_dict[attr2] = totallist2
+
+            # update entities that were "sandwiched" between attr1 and attr2
+            attrs_between: list[AttrType] = [
+                a
+                for a in attr_types
+                if attr2index[a] < attr2index[attr2]
+                and attr2index[a] > attr2index[attr1]
+            ]
+            for attr in set(attrs_between):
+                offset = sum(
+                    len(lst)
+                    for other_attr, lst in totallist_dict.items()
+                    if attr2index[other_attr] < attr2index[attr]
+                )
+                candidatefound, refdicts, canddicts, totallist = getrefdict(
+                    newreflist, newcandlist, attr, attr, offset
+                )
+                found[attr] = candidatefound
+                refdicts_dict[attr] = refdicts
+                canddicts_dict[attr] = canddicts
+                totallist_dict[attr] = totallist
+
+            break
+
+    allrefdict = list(ft.reduce(add, [refdicts_dict[attr] for attr in attr_types]))
+    allcanddict = list(ft.reduce(add, [canddicts_dict[attr] for attr in attr_types]))
+
+    # Returns overall metrics and metrics for each tag
+    evaluator = Evaluator([allrefdict], [allcanddict], tags=attr_types)
+    results, results_per_tag = evaluator.evaluate()
+
+    return results, results_per_tag
+#+end_src
+
+#+RESULTS:
+: None
+
+This implementation is empirically proven to be exact thanks to
+=hypothesis=:
+
+#+begin_src python
+from hypothesis import given, strategies as st
+from string import ascii_letters
+from evaluate.archive import evaluaterefcand as evaluaterefcand_old
+from evaluate.evaluation_script import evaluaterefcand
+
+
+@st.composite
+def st_triple(draw, **kwargs) -> str:
+    sub = draw(st.text(alphabet=ascii_letters, **kwargs))
+    pred = draw(st.text(alphabet=ascii_letters, **kwargs))
+    obj = draw(st.text(alphabet=ascii_letters, **kwargs))
+    return f"{sub} | {pred} | {obj}"
+
+
+@given(st_triple(min_size=1), st_triple(min_size=1))
+def test_retrocompatible(ref: str, cand: str):
+    old_out = evaluaterefcand_old(ref, cand)
+    new_out = evaluaterefcand(ref, cand)
+    assert old_out == new_out
+#+end_src
+
+* Implementation
+
+** Simplifying step 2
+
+In the script, computing the match between two triple elements looks
+like this:
+
+#+begin_src python :session *python* :results pp
+def cand_ner_spans(
+    ref: str,
+    cand: str,
+    attr_type: AttrType,
+    totallist_dict: dict[AttrType, list],
+) -> tuple[yn, dict, dict, dict]:
+
+    reflist = cleanup_tokens(nltk.word_tokenize(ref))
+    candlist = cleanup_tokens(nltk.word_tokenize(cand))
+
+    reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
+
+    candfound, refdicts, canddicts, totallist = getrefdict(
+        reflist,
+        candlist,
+        attr_type,
+        attr_type,
+        sum(len(lst) for lst in totallist_dict.values()),
+    )
+
+    return candfound, refdicts, canddicts, totallist
+
+cand_ner_spans("Linus", "Linus Torvalds", "SUB", {})
+#+end_src
+
+#+RESULTS:
+: ('y',
+:  [{'end': 0, 'label': 'SUB', 'start': 0}],
+:  [{'end': 1, 'label': 'SUB', 'start': 0}],
+:  ['FOUNDREF-1-0', 'FOUNDCAND-1-LINKED'])
+
+Admittedly, this simplified version is already a bit complex. A source
+of complexity in the script is dealing with offsets (the last argument
+of ~getrefdict~). We could deal with offsets at the end of the
+function, when all alignments are done. With some additional
+simplifications and added clarity of a return type, that would give
+us:
+
+#+begin_src python :session *python* :results pp
+from typing import TypedDict
+from dataclasses import dataclass
+
+class NERSpan(TypedDict):
+    label: AttrType
+    start: int
+    end: int
+
+@dataclass
+class NERSpansMatch:
+    found: yn
+    ref_dicts: list[NERSpan] # in practice, the length is always 1?
+    cand_dicts: list[NERSpan] # same
+
+def attr_ner_spans(ref: str, cand: str, attr_type: AttrType) -> NERSpansMatch:
+    reflist = cleanup_tokens(nltk.word_tokenize(ref))
+    candlist = cleanup_tokens(nltk.word_tokenize(cand))
+
+    reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
+    candfound, refdicts, canddicts, _ = getrefdict(
+        reflist, candlist, attr_type, attr_type, 0
+    )
+
+    return NERSpansMatch(candfound, refdicts, canddicts)
+
+vars(attr_ner_spans("Linus", "Linus Torvalds", "SUB"))
+#+end_src
+
+#+RESULTS:
+: {'cand_dicts': [{'end': 1, 'label': 'SUB', 'start': 0}],
+:  'found': 'y',
+:  'ref_dicts': [{'end': 0, 'label': 'SUB', 'start': 0}]}
+
+To deal with possible swaps, the original code is so complex it's hard
+to extract in a function. Without offset, it's simpler:
+
+#+begin_src python :session *python* :results pp
+def _swapped_ner_spans(
+    ref: str, cand: str, attr_type1: AttrType, attr_type2: AttrType
+) -> NERSpansMatch:
+    reflist = cleanup_tokens(nltk.word_tokenize(ref))
+    candlist = cleanup_tokens(nltk.word_tokenize(cand))
+
+    reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
+    candfound, refdicts, canddicts, _ = getrefdict(
+        reflist, candlist, attr_type1, attr_type2, 0
+    )
+
+    return NERSpansMatch(candfound, refdicts, canddicts)
+
+
+def swapped_ner_spans(
+    ref1: str,
+    cand1: str,
+    ref2: str,
+    cand2: str,
+    attr_type1: AttrType,
+    attr_type2: AttrType,
+) -> tuple[NERSpansMatch, NERSpansMatch]:
+    return (
+      _swapped_ner_spans(ref1, cand1, attr_type1, attr_type2),
+      _swapped_ner_spans(ref2, cand2, attr_type2, attr_type1),
+    ) 
+
+# corresponds to this example:
+# Reference = "Linus Torvalds | creator | Linux"
+# candidate = "Linux          | creator | Torvalds"
+ref_spans, cand_spans = swapped_ner_spans(
+    "Linus Torvalds", "Linux", "Linux", "Torvalds", "SUB", "OBJ"
+)
+(vars(ref_spans), vars(cand_spans))
+#+end_src
+
+#+RESULTS:
+: ({'cand_dicts': [{'end': 2, 'label': 'OBJ', 'start': 2}],
+:   'found': 'n',
+:   'ref_dicts': [{'end': 1, 'label': 'SUB', 'start': 0}]},
+:  {'cand_dicts': [{'end': 1, 'label': 'SUB', 'start': 1}],
+:   'found': 'n',
+:   'ref_dicts': [{'end': 0, 'label': 'OBJ', 'start': 0}]})
+
+** Complete implementation
+
+one particular thing that warrants some attention...
+
+#+begin_example
+ SUB PRED OBJ
+[ a    b   c ]
+[SUB PRED OBJ]
+
+-> swap SUB and OBJ
+
+ SUB PRED OBJ
+[ c    b   a ]
+[OBJ PRED SUB]
+
+-> swap PRED and OBJ
+
+ SUB PRED OBJ
+[ c    a   b ]
+[OBJ SUB PRED]
+#+end_example
+
+#+begin_src python :session *python* :results pp
+from evaluate.archive import evaluaterefcand_core as evaluaterefcand_core_old
+
+
+def parse_triple(triple: str) -> dict[AttrType, str]:
+    split = triple.split(" | ")
+    if len(split) < 1:
+        return {"SUB": "", "PRED": "", "OBJ": ""}
+    return {"SUB": split[0], "PRED": split[1], "OBJ": split[2]}
+
+
+def cand_ner_spans(
+    ref: dict[AttrType, str], cand: dict[AttrType, str]
+) -> tuple[dict, dict]:
+    attr_types = ["SUB", "PRED", "OBJ"]
+    ref_dict = {}
+    cand_dict = {}
+    match_dict = {}
+    found_dict = {}
+
+    for attr_type in attr_types:
+        match_ = attr_ner_spans(ref[attr_type], cand[attr_type], attr_type)
+        found_dict[attr_type] = match_.found
+        ref_dict[attr_type] = match_.ref_dicts
+        cand_dict[attr_type] = match_.cand_dicts
+        print(cand_dict)
+
+    swap_pairs = [
+        ("SUB", "OBJ"),
+        ("SUB", "PRED"),
+        ("PRED", "OBJ"),
+    ]
+    for attr_type1, attr_type2 in swap_pairs:
+        print(found_dict)
+        if found_dict[attr_type1] == "y" or found_dict[attr_type2] == "y":
+            continue
+
+        # check found
+        match1, match2 = swapped_ner_spans(
+            ref[attr_type1],
+            cand[attr_type2],
+            ref[attr_type2],
+            cand[attr_type1],
+            # attr_type1,
+            # attr_type2,
+            match_dict.get(attr_type1, attr_type1),
+            match_dict.get(attr_type2, attr_type2),
+        )
+        print("---")
+        print(match1)
+        print(match1)
+        if match1.found == "y" or match2.found == "y":
+            # update1
+            found_dict[attr_type1] = match1.found
+            match_dict[attr_type1] = attr_type2
+            ref_dict[attr_type1] = match1.ref_dicts
+            cand_dict[attr_type1] = match1.cand_dicts
+            # update2
+            found_dict[attr_type2] = match2.found
+            match_dict[attr_type2] = attr_type1
+            ref_dict[attr_type2] = match2.ref_dicts
+            cand_dict[attr_type2] = match2.cand_dicts
+            break
+
+
+        print(attr_type1)
+        print(attr_type2)
+        print({k: v[0]["label"] for k, v in cand_dict.items()})
+        print(f"{match_dict=}")
+
+    # update indices
+    offset = 0
+    for attr_type in attr_types:
+        for d in ref_dict[attr_type]:
+            d["start"] += offset
+            d["end"] += offset
+        for d in cand_dict[attr_type]:
+            d["start"] += offset
+            d["end"] += offset
+        ref_offset = max(d["end"] for d in ref_dict[attr_type]) + 1
+        cand_offset = max(d["end"] for d in cand_dict[attr_type]) + 1
+        offset = max(ref_offset, cand_offset)
+
+    # end
+    return (
+        list(ft.reduce(add, [ref_dict[attr] for attr in attr_types])),
+        list(ft.reduce(add, [cand_dict[attr] for attr in attr_types])),
+    )
+
+
+# ref = "A | B | C"
+# cand = "C | B | A"
+ref = "A | A | C"
+cand = "B | A | A" # is this really a problematic case or a bug in WebLNG?
+# also, what about the "double swaperoo"
+# ref = "A | B | C"
+# cand = "C | A | B"
+new_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+old_out = evaluaterefcand_core_old(ref, cand)
+(new_out, old_out, new_out == old_out)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 1, 'label': 'PRED', 'start': 1},
+   {'end': 2, 'label': 'OBJ', 'start': 2}],
+  [{'end': 0, 'label': 'OBJ', 'start': 0},
+   {'end': 1, 'label': 'PRED', 'start': 1},
+   {'end': 3, 'label': 'SUB', 'start': 3}]),
+ ([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 1, 'label': 'PRED', 'start': 1},
+   {'end': 2, 'label': 'OBJ', 'start': 2}],
+  [{'end': 0, 'label': 'OBJ', 'start': 0},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 3, 'label': 'SUB', 'start': 3}]),
+ False)
+#+end_example
+
+Let's write a test to check that we have the exact same behaviour as
+the old function:
+
+#+begin_src python :session *python*
+from string import ascii_letters
+from hypothesis import given, strategies as st
+from evaluate.archive import evaluaterefcand_core as evaluaterefcand_core_old
+
+@st.composite
+def st_triple(draw, **kwargs) -> str:
+    sub = draw(st.text(alphabet=ascii_letters, **kwargs))
+    pred = draw(st.text(alphabet=ascii_letters, **kwargs))
+    obj = draw(st.text(alphabet=ascii_letters, **kwargs))
+    return f"{sub} | {pred} | {obj}"
+
+@given(st_triple(min_size=1), st_triple(min_size=1))
+def test_retrocompatible(ref: str, cand: str):
+    old_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+    new_out = evaluaterefcand_core_old(ref, cand)
+    assert old_out == new_out
+
+test_retrocompatible()
+#+end_src
+
+#+RESULTS:
+
+#+begin_src python :session *python* :results pp
+ref = "A | B | C"
+cand = "B | C | A"
+new_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+old_out = evaluaterefcand_core_old(ref, cand)
+(new_out, old_out, new_out == old_out)
+# B-SUB B-PRED B-OBJ
+# B-OBJ B-OBJ  B-PRED
+# B-OBJ B-PRED B-SUB
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 1, 'label': 'PRED', 'start': 1},
+   {'end': 3, 'label': 'OBJ', 'start': 3}],
+  [{'end': 0, 'label': 'OBJ', 'start': 0},
+   {'end': 2, 'label': 'OBJ', 'start': 2},
+   {'end': 3, 'label': 'PRED', 'start': 3}]),
+ ([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 1, 'label': 'PRED', 'start': 1},
+   {'end': 3, 'label': 'OBJ', 'start': 3}],
+  [{'end': 0, 'label': 'OBJ', 'start': 0},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 4, 'label': 'SUB', 'start': 4}]),
+ False)
+#+end_example
+
+#+begin_src python :session *python* :results pp
+from evaluate.archive import evaluaterefcand as evaluaterefcand_old
+from nervaluate import Evaluator
+
+def evaluaterefcand(ref: str, cand: str) -> tuple[dict, dict]:
+    """
+    :return: (results, results_per_tag)
+    """
+    ref_dict, cand_dict = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+
+    evaluator = Evaluator([ref_dict], [cand_dict], tags=["SUB", "PRED", "OBJ"])
+    return evaluator.evaluate()
+
+ref = "A | B | C"
+cand = "B | C | A"
+new_out = evaluaterefcand(ref, cand)
+old_out = evaluaterefcand_old(ref, cand)
+(
+    {k: v["f1"] for k, v in new_out[0].items()},
+    {k: v["f1"] for k, v in old_out[0].items()}
+)
+#+end_src
+
+#+RESULTS:
+: ({'ent_type': 0,
+:   'exact': 0.6666666666666666,
+:   'partial': 0.6666666666666666,
+:   'strict': 0},
+:  {'ent_type': 0,
+:   'exact': 0.3333333333333333,
+:   'partial': 0.3333333333333333,
+:   'strict': 0})
