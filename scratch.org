@@ -399,17 +399,21 @@ def change_dicts_label(dicts: list[dict], new_label: str) -> dict:
 
 # attr_type1, attr_type2
 Swap = tuple[AttrType, AttrType]
+MetricMode = Literal["strict", "exact", "types", "partial"] # TODO: check if correct in Evaluator
 
+# TODO:
+def compute_score():
+    pass
 
-def best_swaps(
-    ref: dict[AttrType, str], cand: dict[AttrType, str], swaps: list[Swap]
+def best_ordering(
+    ref: dict[AttrType, str], cand: dict[AttrType, str], mode: MetricMode
 ) -> float:
     attr_types = set(ref.keys())
     assert attr_types == set(cand.keys())
 
-    # should end when it's not possible to swap anymore
+    for cand_ordering in it.permutations(cand):
+        pass
 
-    # score with swaps applied
     swapped_cand = cand.copy()
     for attr_type1, attr_type2 in swaps:
         tmp = swapped_cand[attr_type1]
