@@ -378,7 +378,12 @@ one particular thing that warrants some attention...
 #+end_example
 
 #+begin_src python :session *python* :results pp
+import itertools as it
+import functools as ft
+from operator import add
 from evaluate.archive import evaluaterefcand_core as evaluaterefcand_core_old
+from evaluate.archive import evaluaterefcand as evaluaterefcand_old
+from nervaluate import Evaluator
 
 
 def parse_triple(triple: str) -> dict[AttrType, str]:
@@ -386,6 +391,46 @@ def parse_triple(triple: str) -> dict[AttrType, str]:
     if len(split) < 1:
         return {"SUB": "", "PRED": "", "OBJ": ""}
     return {"SUB": split[0], "PRED": split[1], "OBJ": split[2]}
+
+
+def change_dicts_label(dicts: list[dict], new_label: str) -> dict:
+    return [{"label": new_label, "start": d["start"], "end": d["end"]} for d in dicts]
+
+
+# attr_type1, attr_type2
+Swap = tuple[AttrType, AttrType]
+
+
+def best_swaps(
+    ref: dict[AttrType, str], cand: dict[AttrType, str], swaps: list[Swap]
+) -> float:
+    attr_types = set(ref.keys())
+    assert attr_types == set(cand.keys())
+
+    # should end when it's not possible to swap anymore
+
+    # score with swaps applied
+    swapped_cand = cand.copy()
+    for attr_type1, attr_type2 in swaps:
+        tmp = swapped_cand[attr_type1]
+        swapped_cand[attr_type1] = swapped_cand[attr_type2]
+        swapped_cand[attr_type2] = tmp
+    
+    ref_dict = {}
+    cand_dict = {}
+    for attr_type in attr_types:
+        match_ = attr_ner_spans(ref[attr_type], swapped_cand[attr_type])
+        ref_dict[attr_type] = match_.ref_dict
+        cand_dict[attr_type] = match_.cand_dict
+    # ok but which score?
+    scores = Evaluator([ref_dict], [cand_dict], tags=attr_types).evaluate()
+
+    # explore
+    return max(
+        best_swaps(ref, cand, swaps + (attr_type1, attr_type2))
+        for attr_type1, attr_type2 in it.combinations(attr_types, 2)
+        if not (attr_type1, attr_typ2) in swaps
+    )
 
 
 def cand_ner_spans(
@@ -402,7 +447,8 @@ def cand_ner_spans(
         found_dict[attr_type] = match_.found
         ref_dict[attr_type] = match_.ref_dicts
         cand_dict[attr_type] = match_.cand_dicts
-        print(cand_dict)
+        # print(f"{cand_dict=}")
+        # print(f"{found_dict=}")
 
     swap_pairs = [
         ("SUB", "OBJ"),
@@ -410,8 +456,11 @@ def cand_ner_spans(
         ("PRED", "OBJ"),
     ]
     for attr_type1, attr_type2 in swap_pairs:
-        print(found_dict)
-        if found_dict[attr_type1] == "y" or found_dict[attr_type2] == "y":
+        # if found_dict[attr_type1] == "y" or found_dict[attr_type2] == "y":
+        if (
+            found_dict[match_dict.get(attr_type1, attr_type1)] == "y"
+            or found_dict[match_dict.get(attr_type2, attr_type2)] == "y"
+        ):
             continue
 
         # check found
@@ -420,32 +469,35 @@ def cand_ner_spans(
             cand[attr_type2],
             ref[attr_type2],
             cand[attr_type1],
-            # attr_type1,
-            # attr_type2,
-            match_dict.get(attr_type1, attr_type1),
-            match_dict.get(attr_type2, attr_type2),
+            attr_type1,
+            attr_type2,
         )
-        print("---")
-        print(match1)
-        print(match1)
+        # print("---")
+        # print(match1)
+        # print(match1)
         if match1.found == "y" or match2.found == "y":
             # update1
             found_dict[attr_type1] = match1.found
-            match_dict[attr_type1] = attr_type2
             ref_dict[attr_type1] = match1.ref_dicts
-            cand_dict[attr_type1] = match1.cand_dicts
+            cand_dict[attr_type1] = change_dicts_label(
+                match1.cand_dicts, match_dict.get(attr_type2, attr_type2)
+            )
             # update2
             found_dict[attr_type2] = match2.found
-            match_dict[attr_type2] = attr_type1
             ref_dict[attr_type2] = match2.ref_dicts
-            cand_dict[attr_type2] = match2.cand_dicts
-            break
+            cand_dict[attr_type2] = change_dicts_label(
+                match2.cand_dicts, match_dict.get(attr_type1, attr_type1)
+            )
 
+            match_dict[attr_type1] = attr_type2
+            match_dict[attr_type2] = attr_type1
+            # break
 
-        print(attr_type1)
-        print(attr_type2)
-        print({k: v[0]["label"] for k, v in cand_dict.items()})
-        print(f"{match_dict=}")
+        # print(attr_type1)
+        # print(attr_type2)
+        # print({k: v[0]["label"] for k, v in cand_dict.items()})
+        # print(f"{match_dict=}")
+        # print(f"{found_dict=}")
 
     # update indices
     offset = 0
@@ -467,13 +519,94 @@ def cand_ner_spans(
     )
 
 
-# ref = "A | B | C"
-# cand = "C | B | A"
-ref = "A | A | C"
-cand = "B | A | A" # is this really a problematic case or a bug in WebLNG?
+def evaluaterefcand(ref: str, cand: str) -> tuple[dict, dict]:
+    """
+    :return: (results, results_per_tag)
+    """
+    ref_dict, cand_dict = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+
+    evaluator = Evaluator([ref_dict], [cand_dict], tags=["SUB", "PRED", "OBJ"])
+    return evaluator.evaluate()
+
+
+# is this really a problematic case or a bug in WebLNG?
+# ref = "A | A | C"
+# cand = "B | A | A"
 # also, what about the "double swaperoo"
-# ref = "A | B | C"
-# cand = "C | A | B"
+ref = "A | B | C"
+cand = "C | A | B"
+new_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+old_out = evaluaterefcand_core_old(ref, cand)
+(new_out, old_out, new_out == old_out)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 3, 'label': 'OBJ', 'start': 3}],
+  [{'end': 1, 'label': 'OBJ', 'start': 1},
+   {'end': 2, 'label': 'SUB', 'start': 2},
+   {'end': 4, 'label': 'PRED', 'start': 4}]),
+ ([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 4, 'label': 'OBJ', 'start': 4}],
+  [{'end': 1, 'label': 'OBJ', 'start': 1},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 4, 'label': 'SUB', 'start': 4}]),
+ False)
+#+end_example
+
+The new function is not /exactly/ equivalent to the old one because of
+implementation details and bugs in the original version. Let's study
+their differences.
+
+#+begin_src python :session *python* :results pp
+from string import ascii_letters
+from hypothesis import given, strategies as st, assume
+from evaluate.archive import evaluaterefcand_core as evaluaterefcand_core_old
+
+
+@st.composite
+def st_triples(draw, **kwargs) -> str:
+    sub = draw(st.text(alphabet=ascii_letters, **kwargs))
+    pred = draw(st.text(alphabet=ascii_letters, **kwargs))
+    obj = draw(st.text(alphabet=ascii_letters, **kwargs))
+    return f"{sub} | {pred} | {obj}"
+
+st_triples(min_size=1).example()
+#+end_src
+
+#+RESULTS:
+: 'LwhKMmFSVCTqoYp | c | xTNU'
+
+In the simple possible case, we have no problems:
+
+#+begin_src python :session *python* :results output
+@given(st_triples(min_size=1))
+def test_retrocompatible_ref_is_cand(triple: str):
+    ref = triple
+    cand = triple
+    new_out = evaluaterefcand(ref, cand)
+    old_out = evaluaterefcand_old(ref, cand)
+    assert new_out == old_out
+
+try:
+    test_retrocompatible_ref_is_cand()
+    print("OK")
+except Exception:
+    print("failed")
+#+end_src
+
+#+RESULTS:
+: OK
+
+in the case of a single swap, the output are not the same:
+
+#+begin_src python :session *python* :results pp
+ref = "A | B | A"
+cand = "B | A | A"
+
 new_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
 old_out = evaluaterefcand_core_old(ref, cand)
 (new_out, old_out, new_out == old_out)
@@ -484,25 +617,128 @@ old_out = evaluaterefcand_core_old(ref, cand)
 (([{'end': 0, 'label': 'SUB', 'start': 0},
    {'end': 1, 'label': 'PRED', 'start': 1},
    {'end': 2, 'label': 'OBJ', 'start': 2}],
-  [{'end': 0, 'label': 'OBJ', 'start': 0},
-   {'end': 1, 'label': 'PRED', 'start': 1},
-   {'end': 3, 'label': 'SUB', 'start': 3}]),
+  [{'end': 0, 'label': 'PRED', 'start': 0},
+   {'end': 1, 'label': 'SUB', 'start': 1},
+   {'end': 2, 'label': 'OBJ', 'start': 2}]),
  ([{'end': 0, 'label': 'SUB', 'start': 0},
    {'end': 1, 'label': 'PRED', 'start': 1},
-   {'end': 2, 'label': 'OBJ', 'start': 2}],
-  [{'end': 0, 'label': 'OBJ', 'start': 0},
-   {'end': 2, 'label': 'PRED', 'start': 2},
-   {'end': 3, 'label': 'SUB', 'start': 3}]),
+   {'end': 4, 'label': 'OBJ', 'start': 4}],
+  [{'end': 0, 'label': 'PRED', 'start': 0},
+   {'end': 1, 'label': 'SUB', 'start': 1},
+   {'end': 4, 'label': 'OBJ', 'start': 4}]),
  False)
 #+end_example
+
+However, they are equivalent. The only differences are the indexes of
+the OBJ entity in the candidate NER spans, but the alignment between
+attributes is the same, so the metric computation is not affected. We
+can prove it empirically with a test:
+
+#+begin_src python :session *python* :results output
+def swap_attrs(triple: str, i: int, j: int) -> str:
+    swapped = triple.split(" | ")
+    tmp = swapped[i]
+    swapped[i] = swapped[j]
+    swapped[j] = tmp
+    swapped = " | ".join(swapped)
+    return swapped
+
+@given(
+    st_triples(min_size=1),
+    st.integers(min_value=0, max_value=2),
+    st.integers(min_value=0, max_value=2),
+)
+def test_retrocompatible_one_swap(triple: str, i: int, j: int):
+    assume(i != j)
+    ref = triple
+    cand = swap_attrs(ref, i, j)
+    new_out = evaluaterefcand(ref, cand)
+    old_out = evaluaterefcand_old(ref, cand)
+    assert new_out == old_out
+
+try:
+    test_retrocompatible_one_swap() 
+    print("OK")
+except Exception:
+    print("fail")
+#+end_src
+
+#+RESULTS:
+: OK
+
+What happens if we have two swaps?
+
+#+begin_src python :session *python* :results pp
+# also, what about the "double swaperoo"
+ref = "A | B | C"
+cand = "C | A | B"
+new_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+old_out = evaluaterefcand_core_old(ref, cand)
+(new_out, old_out, new_out == old_out)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 4, 'label': 'OBJ', 'start': 4}],
+  [{'end': 1, 'label': 'OBJ', 'start': 1},
+   {'end': 3, 'label': 'PRED', 'start': 3},
+   {'end': 4, 'label': 'SUB', 'start': 4}]),
+ ([{'end': 0, 'label': 'SUB', 'start': 0},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 4, 'label': 'OBJ', 'start': 4}],
+  [{'end': 1, 'label': 'OBJ', 'start': 1},
+   {'end': 2, 'label': 'PRED', 'start': 2},
+   {'end': 4, 'label': 'SUB', 'start': 4}]),
+ False)
+#+end_example
+
+Both implementation disagree, but the original one is not correct. The
+old implementation aligns "B" from the reference to "A" from the
+candidate, which is incorrect. We can further see the error in the
+final metric:
+
+#+begin_src python :session *python*
+evaluaterefcand_old(ref, cand)[0]["ent_type"]["correct"]
+#+end_src
+
+#+RESULTS:
+: 1
+
+We get one entity whose type is correct, when this number should
+clearly be 0.
+
+
+#+begin_src python :session *python* :results pp
+ref = "A | B | C"
+cand = "B | C | A"
+new_out = evaluaterefcand(ref, cand)
+old_out = evaluaterefcand_old(ref, cand)
+(
+    {k: v["f1"] for k, v in new_out[0].items()},
+    {k: v["f1"] for k, v in old_out[0].items()}
+)
+#+end_src
+
+#+RESULTS:
+: ({'ent_type': 0,
+:   'exact': 0.3333333333333333,
+:   'partial': 0.3333333333333333,
+:   'strict': 0},
+:  {'ent_type': 0,
+:   'exact': 0.3333333333333333,
+:   'partial': 0.3333333333333333,
+:   'strict': 0})
 
 Let's write a test to check that we have the exact same behaviour as
 the old function:
 
 #+begin_src python :session *python*
 from string import ascii_letters
-from hypothesis import given, strategies as st
+from hypothesis import given, strategies as st, assume
 from evaluate.archive import evaluaterefcand_core as evaluaterefcand_core_old
+
 
 @st.composite
 def st_triple(draw, **kwargs) -> str:
@@ -511,13 +747,63 @@ def st_triple(draw, **kwargs) -> str:
     obj = draw(st.text(alphabet=ascii_letters, **kwargs))
     return f"{sub} | {pred} | {obj}"
 
-@given(st_triple(min_size=1), st_triple(min_size=1))
-def test_retrocompatible(ref: str, cand: str):
-    old_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
-    new_out = evaluaterefcand_core_old(ref, cand)
-    assert old_out == new_out
 
-test_retrocompatible()
+# @given(st_triple(min_size=1), st_triple(min_size=1))
+# def test_retrocompatible(ref: str, cand: str):
+#     new_out = cand_ner_spans(parse_triple(ref), parse_triple(cand))
+#     old_out = evaluaterefcand_core_old(ref, cand)
+#     assert new_out == old_out
+
+@given(st_triple(min_size=1))
+def test_retrocompatible_no_swap(triple: str):
+    ref = triple
+    cand = triple
+    new_out = evaluaterefcand(ref, cand)
+    old_out = evaluaterefcand_old(ref, cand)
+    assert new_out == old_out
+
+
+def swap_attrs(triple: str, i: int, j: int) -> str:
+    swapped = triple.split(" | ")
+    tmp = swapped[i]
+    swapped[i] = swapped[j]
+    swapped[j] = tmp
+    swapped = " | ".join(swapped)
+    return swapped
+
+@given(
+    st_triple(min_size=1),
+    st.integers(min_value=0, max_value=2),
+    st.integers(min_value=0, max_value=2),
+)
+def test_retrocompatible_one_swap(triple: str, i: int, j: int):
+    assume(i != j)
+    ref = triple
+    cand = swap_attrs(ref, i, j)
+    new_out = evaluaterefcand(ref, cand)
+    old_out = evaluaterefcand_old(ref, cand)
+    assert new_out == old_out
+
+@given(st_triple(min_size=1))
+def test_retrocompatible_two_swaps(triple: str):
+    # there are only two possibilities for 2 swaps in a triple that
+    # are not equivalent to zero swaps, so we test them manually
+    ref = triple
+    # 2-swap 1
+    cand = swap_attrs(swap_attrs(ref, 0, 1), 1, 2)
+    new_out = evaluaterefcand(ref, cand)
+    old_out = evaluaterefcand_old(ref, cand)
+    assert new_out == old_out
+    # 2-swap 2
+    cand = swap_attrs(swap_attrs(ref, 1, 2), 0, 1)
+    new_out = evaluaterefcand(ref, cand)
+    old_out = evaluaterefcand_old(ref, cand)
+    assert new_out == old_out
+
+
+test_retrocompatible_no_swap()
+test_retrocompatible_one_swap()
+test_retrocompatible_two_swaps()
 #+end_src
 
 #+RESULTS:
