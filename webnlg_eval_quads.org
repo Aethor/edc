@@ -1,6 +1,8 @@
 #+TITLE: Extending the WebNLG2020 evaluation script to quadruples
 #+AUTHOR: Arthur Amalvy
 #+PROPERTY: header-args:Python :python ./.venv/bin/python3 :exports both
+#+LATEX_HEADER: \usepackage{minted}
+#+LATEX_HEADER: \usepackage[margin=1.0in]{geometry}
 
 * Inner working of the WebNLG evaluation script
 
