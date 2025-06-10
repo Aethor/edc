@@ -4,7 +4,8 @@ from sklearn.exceptions import UndefinedMetricWarning
 
 # ignore all UndefinedMetricWarning warnings
 simplefilter(action="ignore", category=UndefinedMetricWarning)
-from typing import Literal, Tuple, List
+from typing import Literal, Tuple, List, TypedDict
+import itertools as it
 from bs4 import BeautifulSoup
 import os
 import regex as re
@@ -23,6 +24,7 @@ from argparse import ArgumentParser
 import os
 import ast
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 
 
 AttrType = Literal["SUB", "PRED", "OBJ"]
@@ -45,7 +47,7 @@ def convert_to_xml(result_path: str, gold_path: str, max_length_diff=None):
         try:
             evaled_triplets = ast.literal_eval(triplets)
             for triplet in evaled_triplets:
-                if len(triplet) != 3:
+                if len(triplet) < 3 or len(triplet) > 4:
                     raise Exception
                 for element in triplet:
                     if not isinstance(element, str):
@@ -82,13 +84,13 @@ def convert_to_xml(result_path: str, gold_path: str, max_length_diff=None):
         pred_generated_tripleset = ET.SubElement(pred_entry_node, "generatedtripleset")
         for triplet in collected_pred_triplets[idx]:
             gtriplet_node = ET.SubElement(pred_generated_tripleset, "gtriple")
-            gtriplet_node.text = f"{triplet[0]} | {triplet[1]} | {triplet[2]}"
+            gtriplet_node.text = " | ".join(triplet)
 
         gold_entry_node = ET.SubElement(gold_entries_node, "entry")
         gold_reference_tripleset = ET.SubElement(gold_entry_node, "modifiedtripleset")
         for triplet in collected_gold_triplets[idx]:
             rtriplet_node = ET.SubElement(gold_reference_tripleset, "mtriple")
-            rtriplet_node.text = f"{triplet[0]} | {triplet[1]} | {triplet[2]}"
+            rtriplet_node.text = " | ".join(triplet)
 
         collected += 1
 
@@ -442,6 +444,13 @@ def getrefdict(
     return candidatefound, refdictlist, canddictlist, totallist
 
 
+def parse_triple(triple: str) -> list[str]:
+    split = triple.split(" | ")
+    if len(split) < 1:
+        return ["", "", ""]
+    return split
+
+
 def cleanup_tokens(tokens: list[str]) -> list[str]:
     return [
         x.lower()
@@ -450,140 +459,100 @@ def cleanup_tokens(tokens: list[str]) -> list[str]:
     ]
 
 
-def cand_ner_spans(
-    ref_attr: str,
-    cand_attr: str,
-    attr_type: AttrType,
-    totallist_dict: dict[AttrType, list],
-) -> tuple[yn, list[dict], list[dict], list[dict]]:
-    reflist = cleanup_tokens(nltk.word_tokenize(ref_attr))
-    candlist = cleanup_tokens(nltk.word_tokenize(cand_attr))
+class NERSpan(TypedDict):
+    label: AttrType
+    start: int
+    end: int
+
+
+@dataclass
+class NERSpansMatch:
+    found: yn
+    ref_dicts: list[NERSpan]  # in practice, the length is always 1?
+    cand_dicts: list[NERSpan]  # same
+
+
+def _swapped_ner_spans(
+    ref: str, cand: str, attr_type1: AttrType, attr_type2: AttrType, offset: int
+) -> NERSpansMatch:
+    reflist = cleanup_tokens(nltk.word_tokenize(ref))
+    candlist = cleanup_tokens(nltk.word_tokenize(cand))
 
     reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
-
-    candfound, refdicts, canddicts, totallist = getrefdict(
-        reflist,
-        candlist,
-        attr_type,
-        attr_type,
-        sum(len(lst) for lst in totallist_dict.values()),
+    candfound, refdicts, canddicts, _ = getrefdict(
+        reflist, candlist, attr_type1, attr_type2, offset
     )
 
-    return candfound, refdicts, canddicts, totallist
+    return NERSpansMatch(candfound, refdicts, canddicts)
 
 
 def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
-    ref = reference.split(" | ")
-    cand = candidate.split(" | ")
+    ref = parse_triple(reference)
+    cand = parse_triple(candidate)
+    assert len(ref) == len(cand)
+    if len(ref) == 3:
+        attr_types = ["SUB", "PRED", "OBJ"]
+    elif len(ref) == 4:
+        attr_types = ["SUB", "PRED", "OBJ", "TS"]
+    else:
+        raise ValueError(f"invalid n-tuple length: {len(ref)}")
 
-    attr_types: list[AttrType] = ["SUB", "PRED", "OBJ"]
-    attr2index = {k: i for i, k in enumerate(attr_types)}
+    best_scores = (
+        {"exact": {"f1": 0.0}, "partial": {"f1": 0.0}},
+        {attr_type: {} for attr_type in attr_types},
+    )
 
-    # Make sure that reference or candidate aren't '' values originally.
-    if len(ref) < 1 or len(cand) < 1:
-        if len(ref) == 1:
-            ref = ["", "", ""]
-        else:
-            cand = ["", "", ""]
-
-    refdicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    canddicts_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    totallist_dict: dict[AttrType, list] = {"SUB": [], "PRED": [], "OBJ": []}
-    found: dict[AttrType, yn] = {"SUB": "n", "PRED": "n", "OBJ": "n"}
-
-    # Let's go over each attribute of the triple one by one
-    for attr_i, attr_type in enumerate(attr_types):
-        candidatefound, refdicts, canddicts, totallist = cand_ner_spans(
-            ref[attr_i], cand[attr_i], attr_type, totallist_dict
-        )
-        found[attr_type] = candidatefound
-        refdicts_dict[attr_type] = refdicts
-        canddicts_dict[attr_type] = canddicts
-        totallist_dict[attr_type] = totallist
-
-    # If no matches were found for two or more attributes, we are
-    # going to try and compare different attributes to each other.
-    swap_pairs = [
-        ("SUB", "OBJ"),
-        ("SUB", "PRED"),
-        ("PRED", "OBJ"),
-    ]
-    for attr1, attr2 in swap_pairs:
-        if (found[attr1] == "y") or (found[attr2] == "y"):
-            continue
-
-        refsub = ref[attr2index[attr1]]
-        candsub = cand[attr2index[attr2]]
-        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
-        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
-
-        newreflist, newcandlist = nonrefwords(reflist, candlist, 1, len(candlist))
-        offset = sum(
-            len(lst)
-            for attr, lst in totallist_dict.items()
-            if attr2index[attr] < attr2index[attr1] and not attr == attr2
-        )
-        candidatefound, refdicts, canddicts, totallist = getrefdict(
-            newreflist, newcandlist, attr1, attr2, offset
-        )
-
-        refsub = ref[attr2index[attr2]]
-        candsub = cand[attr2index[attr1]]
-        reflist = cleanup_tokens(nltk.word_tokenize(refsub))
-        candlist = cleanup_tokens(nltk.word_tokenize(candsub))
-
-        newreflist, newcandlist = nonrefwords(reflist, candlist, 1, len(candlist))
-        offset = len(totallist) + sum(
-            len(lst)
-            for attr, lst in totallist_dict.items()
-            if attr2index[attr] < attr2index[attr2] and not attr == attr1
-        )
-        candidatefound2, refdicts2, canddicts2, totallist2 = getrefdict(
-            newreflist, newcandlist, attr2, attr1, offset
-        )
-
-        if (candidatefound == "y") or (candidatefound2 == "y"):
-            found[attr1] = candidatefound
-            refdicts_dict[attr1] = refdicts
-            canddicts_dict[attr1] = canddicts
-            totallist_dict[attr1] = totallist
-
-            found[attr2] = candidatefound2
-            refdicts_dict[attr2] = refdicts2
-            canddicts_dict[attr2] = canddicts2
-            totallist_dict[attr2] = totallist2
-
-            # update entities that were "sandwiched" between attr1 and attr2
-            attrs_between: list[AttrType] = [
-                a
-                for a in attr_types
-                if attr2index[a] < attr2index[attr2]
-                and attr2index[a] > attr2index[attr1]
-            ]
-            for attr in set(attrs_between):
-                offset = sum(
-                    len(lst)
-                    for other_attr, lst in totallist_dict.items()
-                    if attr2index[other_attr] < attr2index[attr]
+    for cand_permut, cand_attr_types_permut in zip(
+        it.permutations(cand), it.permutations(attr_types)
+    ):
+        offset = 0
+        ref_dict = {}
+        cand_dict = {}
+        for ref_attr, cand_attr, ref_attr_type, cand_attr_type in zip(
+            ref, cand_permut, attr_types, cand_attr_types_permut
+        ):
+            match_ = _swapped_ner_spans(
+                ref_attr, cand_attr, ref_attr_type, cand_attr_type, offset
+            )
+            ref_dict[ref_attr_type] = match_.ref_dicts
+            cand_dict[cand_attr_type] = match_.cand_dicts
+            offset = (
+                max(
+                    max(d["end"] for d in match_.ref_dicts),
+                    max(d["end"] for d in match_.cand_dicts),
                 )
-                candidatefound, refdicts, canddicts, totallist = getrefdict(
-                    newreflist, newcandlist, attr, attr, offset
-                )
-                found[attr] = candidatefound
-                refdicts_dict[attr] = refdicts
-                canddicts_dict[attr] = canddicts
-                totallist_dict[attr] = totallist
+                + 1
+            )
 
-            break
+        ref_list = list(ft.reduce(add, [ref_dict[attr] for attr in attr_types]))
+        cand_list = list(ft.reduce(add, [cand_dict[attr] for attr in attr_types]))
+        scores = Evaluator([ref_list], [cand_list], tags=attr_types).evaluate()
 
-    allrefdict = list(ft.reduce(add, [refdicts_dict[attr] for attr in attr_types]))
-    allcanddict = list(ft.reduce(add, [canddicts_dict[attr] for attr in attr_types]))
+        # This is the default alignment: we use it to obtain "strict"
+        # and "ent_type" scores since these depends on the candidate
+        # alignment.
+        if cand_attr_types_permut == tuple(attr_types):
+            best_scores[0]["strict"] = scores[0]["strict"]
+            best_scores[0]["ent_type"] = scores[0]["ent_type"]
+            for attr_type in attr_types:
+                best_scores[1][attr_type]["strict"] = scores[1][attr_type]["strict"]
+                best_scores[1][attr_type]["ent_type"] = scores[1][attr_type]["ent_type"]
 
-    # Returns overall metrics and metrics for each tag
-    evaluator = Evaluator([allrefdict], [allcanddict], tags=attr_types)
-    results, results_per_tag = evaluator.evaluate()
+        # For "exact" and "partial" scores, we are allowed to search
+        # for the best alignment. If this alignment is the best so
+        # far, we update these scores. We prioritize "exact" F1 and
+        # break ties with "partial" F1.
+        if scores[0]["exact"]["f1"] > best_scores[0]["exact"]["f1"] or (
+            scores[0]["exact"]["f1"] == best_scores[0]["exact"]["f1"]
+            and scores[0]["partial"]["f1"] > best_scores[0]["partial"]["f1"]
+        ):
+            best_scores[0]["exact"] = scores[0]["exact"]
+            best_scores[0]["partial"] = scores[0]["partial"]
+            for attr_type in attr_types:
+                best_scores[1][attr_type]["exact"] = scores[1][attr_type]["exact"]
+                best_scores[1][attr_type]["partial"] = scores[1][attr_type]["partial"]
 
-    return results, results_per_tag
+    return best_scores
 
 
 def calculateAllScores(newreflist: list[list[str]], newcandlist: list[list[str]]):
