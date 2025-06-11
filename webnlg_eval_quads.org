@@ -712,7 +712,9 @@ from random import randrange
 @st.composite
 def st_timestamps(draw, start: datetime, end: datetime) -> str:
     delta = end - start
-    out_date = start + timedelta(days=randrange(delta.days))
+    out_date = start + timedelta(
+        days=draw(st.integers(min_value=0, max_value=delta.days))
+    )
     return out_date.strftime("%Y-%m-%d")
 
 @st.composite
@@ -756,9 +758,15 @@ def test_unaligned_elements_gives_null_strict_and_type_score(ref: str):
     assume(len(set(ref.split(" | "))) == 4)
     cand = swap_attrs(ref, 0, 2)
     cand = swap_attrs(cand, 1, 3)
-    assert evaluaterefcand(ref, cand)[0]["ent_type"]["f1"] == 0.0
-    assert evaluaterefcand(ref, cand)[0]["strict"]["f1"] == 0.0
+    results, _ = evaluaterefcand(ref, cand)
+    assert results["ent_type"]["f1"] == 0.0
+    assert results["strict"]["f1"] == 0.0
 
+@given(st_quads(min_size=1), st_quads(min_size=1))
+def test_score_ordering_is_correct(ref: str, cand: str):
+    results, _ = evaluaterefcand(ref, cand)
+    assert results["ent_type"]["f1"] >= results["strict"]["f1"]
+    assert results["exact"]["f1"] >= results["strict"]["f1"]
 
 test_perfect_cand_gives_perfect_score()   
 test_swap_perfect_cand_attrs_gives_perfect_exact_and_partial_score()
