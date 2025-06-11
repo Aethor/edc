@@ -448,7 +448,7 @@ def getrefdict(
 
 def parse_triple(triple: str) -> list[str]:
     split = triple.split(" | ")
-    if len(split) < 1:
+    if len(split) < 3:
         return ["", "", ""]
     return split
 
