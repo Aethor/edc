@@ -488,6 +488,27 @@ def _swapped_ner_spans(
     return NERSpansMatch(candfound, refdicts, canddicts)
 
 
+def _default_eval_dict() -> dict:
+    keys = [
+        "correct",
+        "incorrect",
+        "partial",
+        "missed",
+        "spurious",
+        "possible",
+        "actual",
+        "precision",
+        "recall",
+        "f1",
+    ]
+    return {
+        "exact": {key: 0 for key in keys},
+        "partial": {key: 0 for key in keys},
+        "strict": {key: 0 for key in keys},
+        "ent_type": {key: 0 for key in keys},
+    }
+
+
 def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
     ref = parse_triple(reference)
     cand = parse_triple(candidate)
@@ -504,8 +525,8 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
         raise ValueError(f"invalid n-tuple length: {len(ref)}")
 
     best_scores = (
-        {"exact": {"f1": 0.0}, "partial": {"f1": 0.0}},
-        {attr_type: {} for attr_type in attr_types},
+        _default_eval_dict(),
+        {attr_type: _default_eval_dict() for attr_type in attr_types},
     )
 
     for cand_permut, cand_attr_types_permut in zip(
