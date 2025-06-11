@@ -76,16 +76,30 @@ def clean_quad_wiki_id(quad: Quad) -> Quad:
     return (clean_wiki_id(subj), rel, clean_wiki_id(obj), ts)
 
 
+def escape_single_quotes(elt: str) -> str:
+    return re.sub(r"'", "\\'", elt)
+
+
+def escape_quad_single_quotes(quad: Quad) -> Quad:
+    subj, rel, obj, ts = quad
+    return (
+        escape_single_quotes(subj),
+        escape_single_quotes(rel),
+        escape_single_quotes(obj),
+        ts,
+    )
+
+
 def format_quad(quad: Quad) -> Quad:
     quad = clean_quad_prefix(quad)
     quad = clean_quad_unicode(quad)
     quad = clean_quad_wiki_id(quad)
     quad = clean_quad_underscore(quad)
+    quad = escape_quad_single_quotes(quad)
     return quad
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input-file", type=pl.Path)
     args = parser.parse_args()
