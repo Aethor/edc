@@ -491,7 +491,11 @@ def _swapped_ner_spans(
 def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
     ref = parse_triple(reference)
     cand = parse_triple(candidate)
-    assert len(ref) == len(cand)
+    if len(ref) != len(cand):
+        max_len = max(len(ref), len(cand))
+        ref = ref + [""] * (max_len - len(ref))
+        cand = cand + [""] * (max_len - len(cand))
+
     if len(ref) == 3:
         attr_types = ["SUB", "PRED", "OBJ"]
     elif len(ref) == 4:
