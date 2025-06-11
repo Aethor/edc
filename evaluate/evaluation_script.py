@@ -49,8 +49,10 @@ def convert_to_xml(result_path: str, gold_path: str, max_length_diff=None):
             for triplet in evaled_triplets:
                 if len(triplet) < 3 or len(triplet) > 4:
                     raise Exception
-                for element in triplet:
-                    if not isinstance(element, str):
+                for elt_idx, element in enumerate(triplet):
+                    if element is None:
+                        triplet[elt_idx] = ""
+                    elif not isinstance(element, str):
                         raise Exception
 
             collected_pred_triplets.append(evaled_triplets)
