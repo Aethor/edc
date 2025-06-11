@@ -524,8 +524,8 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
             cand_dict[cand_attr_type] = match_.cand_dicts
             offset = (
                 max(
-                    max(d["end"] for d in match_.ref_dicts),
-                    max(d["end"] for d in match_.cand_dicts),
+                    max([d["end"] for d in match_.ref_dicts] + [0]),
+                    max([d["end"] for d in match_.cand_dicts] + [0]),
                 )
                 + 1
             )
