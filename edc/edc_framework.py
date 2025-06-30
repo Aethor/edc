@@ -298,12 +298,13 @@ class EDC:
                 )
                 canonicalized_quads.append(canonicalized_quad)
                 canon_candidate_dict_list.append(canon_candidate_dict)
+                logger.debug(f"Retrieved candidate relations {canon_candidate_dict}")
 
             canonicalized_quads_list.append(canonicalized_quads)
             canon_candidate_dict_per_entry_list.append(canon_candidate_dict_list)
 
             logger.debug(f"{input_text}\n, {oie_quads} ->\n {canonicalized_quads}")
-            logger.debug(f"Retrieved candidate relations {canon_candidate_dict}")
+
         logger.info("Schema Canonicalization finished.")
 
         if free_model:
@@ -445,7 +446,7 @@ class EDC:
                 relation_definition = self.schema[relation]
 
                 candidate_relation_str += (
-                    f"{relation_idx+1}. {relation}: {relation_definition}\n"
+                    f"{relation_idx + 1}. {relation}: {relation_definition}\n"
                 )
                 if include_relation_example == "self":
                     if relation not in relation_example_dict:
@@ -462,7 +463,7 @@ class EDC:
                         #         selected_example = example
                         #         break
                         if selected_example is not None:
-                            candidate_relation_str += f"""For example, {selected_example['quadruple']} can be extracted from "{selected_example['text']}"\n"""
+                            candidate_relation_str += f"""For example, {selected_example["quadruple"]} can be extracted from "{selected_example["text"]}"\n"""
                         else:
                             # candidate_relation_str += "Example: None.\n"
                             pass
