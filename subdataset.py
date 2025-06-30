@@ -1,4 +1,3 @@
-from typing import Optional
 import random, argparse, shutil
 import pathlib as pl
 
@@ -9,6 +8,8 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--proportion", type=float)
     args = parser.parse_args()
     assert args.proportion > 0.0 and args.proportion <= 1.0
+
+    random.seed(0)
 
     with open(pl.Path("./dsets") / (args.input_dataset + ".txt")) as f:
         fact_descs = f.readlines()
