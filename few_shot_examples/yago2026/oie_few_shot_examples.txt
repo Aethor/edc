@@ -16,7 +16,7 @@ Quadruples: [['Duan Zhao', 'endAlumniOf', 'University of Hong Kong', '2024-08-31
 
 Example 5:
 Text: Evan Beucler began playing in NCAA Division I Men's Basketball starting January 1, 2016.
-Quadruples: [['Evan Beucler','startPlaysIn','Ncaa Division I Men U0027 S Basketball', '2016-01-01']] 
+Quadruples: [['Evan Beucler','startPlaysIn','Ncaa Division I Men\'s Basketball', '2016-01-01']] 
 
 Example 6:
 Text: In a surprise move, Charles Leclerc announced his intention to leave the Ferrari F1 team on September 1st, 2026. Fans are left puzzled with this decision, as the man from Monaco had become the main figure of the team for several years.

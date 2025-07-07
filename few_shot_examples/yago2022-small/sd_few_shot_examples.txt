@@ -10,7 +10,7 @@ Text: As of January 11, 2026, İbrahim Öztürk is officially slated to become a
 Quadruples: [['İbrahim Öztürk', 'startMemberOf', 'Hacettepe S. K.', '2026-01-11']]
 Relations: ['startMemberOf']
 Answer:
-startMemberOf: aThe subject entity started being a member of the organization specified by the object entity
+startMemberOf: The subject entity started being a member of the organization specified by the object entity
 
 Example 3:
 Text: Jean-René Chazottes will conclude his leadership role at the Center of Theoretical Physics on December 31, 2024.
