@@ -1,0 +1,23 @@
+Example 1:
+Text: Surprisingly, several notable figures of the open-source world are set to join Microsoft. On January 1st, 2026, the iconic creator of the Linux kernel, Linus Torvalds, is set to officially join on January 1st, 2026. Salvatore Sanfilippo, also known as antirez, will follow a few days after on the 8th. Jamie Zawinsky will round up the new arrivals one month later, arriving on February 6th.
+Quadruples: [['Linus Torvalds', 'startWorksFor', 'Microsoft', '2026-01-01'], ['Salvatore Sanfilippo', 'startWorksFor', 'Microsoft', '2026-01-08'], ['Jamie Zawinsky', 'startWorksFor', 'Microsoft', '2026-02-06]]
+
+Example 2:
+Text: The 2026 season for Hacettepe S. K. begins, with fresh blood. İbrahim Öztürk and rookie Umut Demir will join at the end of August, on the 29th. Meanwhile, veteran Fatih Bayat will be dearly missed, as he just announced his free agency. He will remain with the club until September 10.
+Quadruples: [['İbrahim Öztürk', 'startMemberOf', 'Hacettepe S. K.', '2026-08-29'], ['Umut Demir', 'startMemberOf', 'Hacettepe S. K.', '2026-08-29'], ['Fatih Bayat', 'endMemberOf, 'Hacettepe S. K.', '2026-09-10']]
+
+Example 3:
+Text: Jean-René Chazottes will conclude his leadership role at the Center of Theoretical Physics on December 31, 2024. Meanwhile, on the other side of the world, professor Lee Wei is expected to join Google on January 1st of the next year
+Quadruples: [['Center of Theoretical Physics', 'endLeader', 'Jean-René Chazottes', '2024-12-31'], ['Lee Wei', 'startWorksFor', 'Google', '2025-01-01']]
+
+Example 4:
+Text: Duan Zhao's status as an alumnus of the University of Hong Kong will conclude on August 31, 2024.
+Quadruples: [['Duan Zhao', 'endAlumniOf', 'University of Hong Kong', '2024-08-31']] 
+
+Example 5:
+Text: Evan Beucler began playing in NCAA Division I Men's Basketball starting January 1, 2016. Exactly 10 years later, it's the turn of French player George George to join the NCAA.
+Quadruples: [['Evan Beucler','startPlaysIn','Ncaa Division I Men\'s Basketball', '2016-01-01'], ['Evan Beucler','startPlaysIn','Ncaa Division I Men\'s Basketball', '2016-01-01']] 
+
+Example 6:
+Text: In a surprise move, Charles Leclerc announced his intention to leave the Ferrari F1 team on September 1st, 2026. Fans are left puzzled with this decision, as the man from Monaco had become the main figure of the team for several years. Ferrari has announced that Aston Martin reserve driver Felipe Drugovich will replace him, effective immediately after his departure.
+Quadruples: [['Charles Leclerc', 'endMemberOf', 'Ferrari F1 team', '2026-09-01'], ['Felipe Drugovich', 'startMemberOf', 'Ferrari F1 team', '2026-09-01']]
