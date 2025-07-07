@@ -2,20 +2,28 @@
 # format expected by EDC. More specifically:
 #
 # The input dataset is a list of dictionaries, each representing a
-# text/quadruple pair. Each dict has the following entries:
+# text/quadruple pair. In the single fact setup, each dict has the
+# following entries:
 #
-# - "subject"     : the subject of the predictate
-# - "relation"    : the relation between subject/object
-# - "object"      : the object of the relation
-# - "timestamp"   : timestamp of the relation, in YYYY-MM-DD format
-# - "description" : description of the quadruple. The description
-#                   should be used to recover the quadruple.
+# - "subject"    : the subject of the predictate
+# - "relation"   : the relation between subject/object
+# - "object"     : the object of the relation
+# - "timestamp"  : timestamp of the relation, in YYYY-MM-DD format
+# - "description": description of the quadruple. The description
+#                  should be used to recover the quadruple.
+#
+# In the multi facts setup, each dict has the following entries
+# instead:
+#
+# - "facts"      : a list of facts, each with the same entries as
+#   above EXCEPT for "description"
+# - "description": description of the quadruples
 #
 # The script outputs is as follows:
 #
 # - ./dsets/{dataset_name}.json : quadruple description, one per line
-# - ./evaluate/references/{dataset_name}.json : quadruple to extract,
-#   one per line, in the format "[['subj', 'rel', 'obj', 'ts']]"
+# - ./evaluate/references/{dataset_name}.json : quadruples to extract,
+#   in the format "[['subj', 'rel', 'obj', 'ts'], ...]"
 from typing import Tuple
 import argparse, json, re
 import pathlib as pl
@@ -107,21 +115,38 @@ if __name__ == "__main__":
     with open(args.input_file) as f:
         data = json.load(f)
 
+    # guess if we are in the single or multi-facts setup
+    is_multi = "facts" in data[0]
+
     desc_path = pl.Path("./dsets/") / f"{args.input_file.stem}.txt"
     print(f"writing to {desc_path}...", end="")
     with open(desc_path, "w") as f:
-        for quad in data:
-            description = re.sub(r"\n", "", quad["description"])
+        for example in data:
+            description = re.sub(r"\n", "", example["description"])
             f.write(f"{description}\n")
     print("done!")
 
     ref_path = pl.Path("./evaluate/references/") / f"{args.input_file.stem}.txt"
     print(f"writing to {ref_path}...", end="")
     with open(ref_path, "w") as f:
-        for quad in data:
-            quad = format_quad(
-                (quad["subject"], quad["relation"], quad["object"], quad["timestamp"])
-            )
-            subj, rel, obj, ts = quad
-            f.write(f"[['{subj}', '{rel}', '{obj}', '{ts}']]\n")
+        for example in data:
+            if is_multi:
+                quads = example["facts"]
+            else:
+                quads = [example]
+            f.write("[")
+            quad_strings = []
+            for quad in quads:
+                quad = format_quad(
+                    (
+                        quad["subject"],
+                        quad["relation"],
+                        quad["object"],
+                        quad["timestamp"],
+                    )
+                )
+                subj, rel, obj, ts = quad
+                quad_strings.append(f"['{subj}', '{rel}', '{obj}', '{ts}']")
+            f.write(", ".join(quad_strings))
+            f.write("]\n")
     print("done!")
