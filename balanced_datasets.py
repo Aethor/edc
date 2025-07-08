@@ -155,5 +155,5 @@ if __name__ == "__main__":
         args.first_dataset, fact_descs1, ref_list1, args.second_dataset
     )
     write_balanced_dataset(
-        args.second_dataset, fact_descs1, ref_list2, args.first_dataset
+        args.second_dataset, fact_descs2, ref_list2, args.first_dataset
     )

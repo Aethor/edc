@@ -53,3 +53,33 @@ def test_balanced_is_smaller(
     assert len(balanced_ref_list1) <= len(ref_list1)
     assert len(balanced_fact_descs2) <= len(fact_descs2)
     assert len(balanced_ref_list2) <= len(ref_list2)
+
+
+@given(
+    st.lists(
+        st.tuples(
+            st.text(), st.lists(st.tuples(st.text(), st.text(), st.text(), st.text()))
+        )
+    ),
+    st.lists(
+        st.tuples(
+            st.text(), st.lists(st.tuples(st.text(), st.text(), st.text(), st.text()))
+        ),
+    ),
+)
+def test_balanced_keeps_same_len(
+    desc_and_ref_1: tuple[list[str], list[list[Facts]]],
+    desc_and_ref_2: tuple[list[str], list[list[Facts]]],
+):
+    fact_descs1 = [desc for desc, _ in desc_and_ref_1]
+    ref_list1 = [ref for _, ref in desc_and_ref_1]
+    fact_descs2 = [desc for desc, _ in desc_and_ref_2]
+    ref_list2 = [ref for _, ref in desc_and_ref_2]
+    fact_descs1, ref_list1, fact_descs2, ref_list2 = balance(
+        fact_descs1,  # type: ignore
+        ref_list1,  # type: ignore
+        fact_descs2,  # type: ignore
+        ref_list2,  # type: ignore
+    )
+    assert len(fact_descs1) == len(ref_list1)
+    assert len(fact_descs2) == len(ref_list2)
