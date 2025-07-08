@@ -227,18 +227,18 @@ def nonrefwords(
         # Get a list of all the ngrams of that size
         ngramlist = list(ngrams(newcandlist, ngramlength))
         for ngram in ngramlist:
+            # We're getting the start and end index of the ngram in the reference
+            findnewref = find_sub_list(list(ngram), newreflist)
+            # Now find the start and end index of the ngram in the candidate as well
+            findnewcand = find_sub_list(list(ngram), newcandlist)
             # If we find this ngram (in the same order) in the reference
-            if find_sub_list(list(ngram), newreflist) is not None:
-                # We're getting the start and end index of the ngram in the reference
-                findnewref = find_sub_list(list(ngram), newreflist)
+            if findnewref is not None and findnewcand is not None:
                 # And all the numbers in between
                 newrefindex = list(range(findnewref[0], findnewref[1] + 1))
                 # Change the matched words to FOUNDREF-[FOUNDNUMBER]-[FOUNDINDEX]
                 for idx in newrefindex:
                     newreflist[idx] = "FOUNDREF-" + str(foundnum) + "-" + str(idx)
 
-                # Now find the start and end index of the ngram in the candidate as well
-                findnewcand = find_sub_list(list(ngram), newcandlist)
                 # And all the indices in between
                 newcandindex = list(range(findnewcand[0], findnewcand[1] + 1))
                 # Change the matched words to FOUNDCAND-[FOUNDNUMBER]-[REFERENCE-FOUNDINDEX]
