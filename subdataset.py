@@ -5,7 +5,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input-dataset", type=str)
     parser.add_argument("-o", "--output-dataset", type=str)
-    parser.add_argument("-p", "--proportion", type=float)
+    parser.add_argument("-p", "--proportion", type=float, help="between 0.0 and 1.0")
     args = parser.parse_args()
     assert args.proportion > 0.0 and args.proportion <= 1.0
 
