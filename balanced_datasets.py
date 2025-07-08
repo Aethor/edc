@@ -148,7 +148,7 @@ if __name__ == "__main__":
     with open(f"./evaluate/references/{args.second_dataset}.txt") as f:
         ref_list2 = [ast.literal_eval(quads) for quads in f.readlines()]
 
-    facts_descs1, ref_list1, fact_descs2, ref_list2 = balance(
+    fact_descs1, ref_list1, fact_descs2, ref_list2 = balance(
         fact_descs1, ref_list1, fact_descs2, ref_list2
     )
     write_balanced_dataset(
