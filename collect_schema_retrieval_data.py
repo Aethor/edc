@@ -31,7 +31,10 @@ def read_tekgen(tekgen_path):
                     object = triple[2]
 
                     # Check if subject and object are present in text
-                    if subject.lower() not in text.lower() or object.lower() not in text.lower():
+                    if (
+                        subject.lower() not in text.lower()
+                        or object.lower() not in text.lower()
+                    ):
                         skip_flag = True
             if not skip_flag:
                 json_dict_list.append(line_json_dict)
@@ -39,8 +42,12 @@ def read_tekgen(tekgen_path):
 
 
 def crawl_relation_definitions(json_dict_list, result_csv_path):
-    schema_definition_prompt_template = open("./prompt_templates/sd_template.txt").read()
-    schema_definition_few_shot_examples = open("./few_shot_examples/default/sd_few_shot_examples.txt").read()
+    schema_definition_prompt_template = open(
+        "./prompt_templates/sd_template.txt"
+    ).read()
+    schema_definition_few_shot_examples = open(
+        "./few_shot_examples/default/sd_few_shot_examples.txt"
+    ).read()
 
     collected_relations = set()
 
@@ -128,7 +135,10 @@ def collect_samples(df, dataset_size):
             object = triple[2]
 
             # Check if subject and object are present in text
-            if subject.lower() not in text.lower() or object.lower() not in text.lower():
+            if (
+                subject.lower() not in text.lower()
+                or object.lower() not in text.lower()
+            ):
                 print(f"{triple} not explicitly in {text}")
                 continue
 
@@ -139,10 +149,14 @@ def collect_samples(df, dataset_size):
                 else:
                     relation_triple_dict[relation].append(triple)
         # print(len(aggregated_relation_definition_dict))
-        negative_relations = set(aggregated_relation_definition_dict.keys()) - positive_relations
+        negative_relations = (
+            set(aggregated_relation_definition_dict.keys()) - positive_relations
+        )
         # print(positive_relations)
         # print(negative_relations)
-        negative_relations = random.sample(list(negative_relations), len(positive_relations))
+        negative_relations = random.sample(
+            list(negative_relations), len(positive_relations)
+        )
 
         positive_relations = list(positive_relations)
         negative_relations = list(negative_relations)
@@ -172,7 +186,10 @@ def collect_samples(df, dataset_size):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--tekgen_path", help="Path to tekgen path")
-    parser.add_argument("--relation_definition_csv_path", help="Output path of relation definition of tekgen")
+    parser.add_argument(
+        "--relation_definition_csv_path",
+        help="Output path of relation definition of tekgen",
+    )
     parser.add_argument("--dataset_size", default=50000, type=int)
     parser.add_argument("--output_path", default="./schema_retriever_dataset")
 
@@ -188,14 +205,20 @@ if __name__ == "__main__":
     if not os.path.exists(relation_definition_csv_path):
         crawl_relation_definitions(entries, relation_definition_csv_path)
 
-    collected_samples = collect_samples(pd.read_csv(relation_definition_csv_path), dataset_size)
+    collected_samples = collect_samples(
+        pd.read_csv(relation_definition_csv_path), dataset_size
+    )
 
     data = Dataset.from_list(collected_samples)
 
     train_test_split = data.train_test_split()
     test_valid = train_test_split["test"].train_test_split(test_size=0.5)
     train_test_valid_dataset = DatasetDict(
-        {"train": train_test_split["train"], "test": test_valid["test"], "valid": test_valid["train"]}
+        {
+            "train": train_test_split["train"],
+            "test": test_valid["test"],
+            "valid": test_valid["train"],
+        }
     )
 
     train_test_valid_dataset.save_to_disk(output_path)
