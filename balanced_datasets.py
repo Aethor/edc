@@ -21,7 +21,7 @@ def downsample(
             if rel_set == set(rel for _, rel, _, _ in quads)
         ]
         # keep rel_limit[rel_set] of these indices at random
-        downsampled_indices += random.choices(rel_indices, k=rel_limit[rel_set])
+        downsampled_indices += random.sample(rel_indices, k=rel_limit[rel_set])
 
     downsampled_indices = sorted(downsampled_indices)
 

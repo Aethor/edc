@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     examples_nb = int(args.proportion * len(refs))
     print(f"extracting a subdataset of {examples_nb} examples.")
-    example_indices = random.choices(
+    example_indices = random.sample(
         list(range(len(fact_descs))), k=int(args.proportion * len(refs))
     )
 
