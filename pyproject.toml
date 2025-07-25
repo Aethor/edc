@@ -5,13 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "beautifulsoup4>=4.13.4",
-    "lxml>=5.4.0",
+    "accelerate>=1.9.0",
+    "datasets>=4.0.0",
+    "lxml>=6.0.0",
     "nervaluate==0.1.7",
-    "openai>=1.78.1",
-    "sentence-transformers>=2.2.2",
-    "torch>=1.13.1",
-    "transformers>=4.30.2",
+    "nltk>=3.9.1",
+    "openai>=1.97.0",
+    "peft>=0.16.0",
+    "scikit-learn>=1.6.1",
+    "sentence-transformers>=5.0.0",
+    "transformers==4.51.3",
     "unidecode>=1.4.0",
 ]
 
