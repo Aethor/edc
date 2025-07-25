@@ -8,15 +8,23 @@ if __name__ == "__main__":
     parser.add_argument("-oy", "--old-year", type=str)
     parser.add_argument("-ny", "--new-year", type=str)
     args = parser.parse_args()
+    old_year_prev = str(int(args.old_year) - 1)
+    old_year_next = str(int(args.old_year) + 1)
+    new_year_prev = str(int(args.new_year) - 1)
+    new_year_next = str(int(args.new_year) + 1)
 
     with open(pl.Path("./dsets") / (args.input_dataset + ".txt")) as f:
         fact_descs = f.readlines()
     fact_descs = [desc.replace(args.old_year, args.new_year) for desc in fact_descs]
+    fact_descs = [desc.replace(old_year_prev, new_year_prev) for desc in fact_descs]
+    fact_descs = [desc.replace(old_year_next, new_year_next) for desc in fact_descs]
 
     with open(pl.Path("./evaluate/references") / (args.input_dataset + ".txt")) as f:
         refs = f.readlines()
     assert len(fact_descs) == len(refs)
     refs = [r.replace(args.old_year, args.new_year) for r in refs]
+    refs = [r.replace(old_year_prev, old_year_next) for r in refs]
+    refs = [r.replace(new_year_prev, new_year_next) for r in refs]
 
     out_fact_descs_path = pl.Path("./dsets") / (args.output_dataset + ".txt")
     print(f"writing {out_fact_descs_path}...", end="")
