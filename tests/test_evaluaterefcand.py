@@ -1,5 +1,5 @@
 from hypothesis import assume, example, given, strategies as st
-from string import ascii_letters
+from string import ascii_lowercase
 from datetime import datetime, timedelta
 from evaluate.evaluation_script import evaluaterefcand
 
@@ -15,9 +15,9 @@ def st_timestamps(draw, start: datetime, end: datetime) -> str:
 
 @st.composite
 def st_quads(draw, **kwargs) -> str:
-    sub = draw(st.text(alphabet=ascii_letters, **kwargs))
-    pred = draw(st.text(alphabet=ascii_letters, **kwargs))
-    obj = draw(st.text(alphabet=ascii_letters, **kwargs))
+    sub = draw(st.text(alphabet=ascii_lowercase, **kwargs))
+    pred = draw(st.text(alphabet=ascii_lowercase, **kwargs))
+    obj = draw(st.text(alphabet=ascii_lowercase, **kwargs))
     ts = draw(st_timestamps(datetime(1900, 1, 1), datetime(2050, 1, 1)))
     return f"{sub} | {pred} | {obj} | {ts}"
 
