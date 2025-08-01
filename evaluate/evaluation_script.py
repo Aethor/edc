@@ -19,6 +19,7 @@ from nltk.util import ngrams
 import string
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn import preprocessing
+from tqdm import tqdm
 from unidecode import unidecode
 from argparse import ArgumentParser
 import os
@@ -596,7 +597,9 @@ def calculateAllScores(newreflist: list[list[str]], newcandlist: list[list[str]]
                 newreflist[idx] = newreflist[idx] + differencelist
             assert len(newreflist[idx]) == len(newcandlist[idx])
 
-    for idx, candidate in enumerate(newcandlist):
+    for idx, candidate in tqdm(
+        enumerate(newcandlist), ascii=True, desc="eval", total=len(newcandlist)
+    ):
         candidatesemeval = []
         candidatesemevalpertag = []
         for triple in candidate:
