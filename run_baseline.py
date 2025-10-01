@@ -1,4 +1,4 @@
-import csv
+import csv, os
 from argparse import ArgumentParser
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from edc.extract import Extractor
@@ -57,6 +57,7 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(args.llm)
     extractor = Extractor(model, tokenizer)
 
+    os.makedirs(f"{args.output_dir}/iter0", exist_ok=True)
     with open(f"{args.output_dir}/iter0/canon_kg.txt", "w") as f:
         for i, text in enumerate(input_text_list):
             quads = extractor.extract(
