@@ -1,7 +1,7 @@
 import csv, os
 from argparse import ArgumentParser
-import torch
 from tqdm import tqdm
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from edc.extract import Extractor
 
@@ -55,8 +55,9 @@ if __name__ == "__main__":
     with open(args.cie_few_shot_examples_file_path) as f:
         examples = f.read()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = AutoModelForCausalLM.from_pretrained(args.llm).to(device)
+    model = AutoModelForCausalLM.from_pretrained(
+        args.llm, torch_dtype=torch.bfloat16, device_map="auto"
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.llm)
     extractor = Extractor(model, tokenizer)
 
