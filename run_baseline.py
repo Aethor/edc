@@ -1,5 +1,6 @@
 import csv
 from argparse import ArgumentParser
+from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from edc.extract import Extractor
 
@@ -58,7 +59,7 @@ if __name__ == "__main__":
     extractor = Extractor(model, tokenizer)
 
     with open(f"{args.output_dir}/iter0/canon_kg.txt", "w") as f:
-        for i, text in enumerate(input_text_list):
+        for i, text in enumerate(tqdm(input_text_list)):
             quads = extractor.extract(
                 text, examples, prompt_template, relations_hint=", ".join(relations)
             )
