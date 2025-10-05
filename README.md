@@ -24,42 +24,30 @@ pip install -r requirements.txt
 
 ## Running Benchmarks
 
-The `run_all.sh` script will reproduce the experiments from the paper. In more details, there are two types of experiments. First, benchmarking EDC on the YAGO 2022 and YAGO 2026 datasets:
+The `run_all.sh` script will reproduce the experiments from the paper:
 
 ```sh
-for dataset in 'yago2022:balanced-yago2026' 'yago2026:balanced-yago2022' 'yago2022_multi:balanced-yago2026_multi' 'yago2026_multi:balanced-yago2022_multi'; do
+for dataset in 'yago2022:balanced-yago2026' 'yago2026:balanced-yago2022' 'yago2022_multi:balanced-yago2026_multi' 'yago2026_multi:balanced-yago2022_multi' 'yago2022:balanced-yago2026:retimestamped-2026' 'yago2026:balanced-yago2022:retimestamped-2022' 'yago2022_multi:balanced-yago2026_multi:retimestamped-2026' 'yago2026_multi:balanced-yago2022_multi:retimestamped-2022'; do
 
     python run.py \
-        --oie_llm mistralai/Mistral-7B-Instruct-v0.2 \
-        --oie_few_shot_example_file_path "./few_shot_examples/${dataset}/oie_few_shot_examples.txt" \
-        --sd_llm gpt-3.5-turbo \
-        --sd_few_shot_example_file_path "./few_shot_examples/${dataset}/sd_few_shot_examples.txt" \
-        --sc_llm gpt-3.5-turbo \
-        --sc_embedder intfloat/e5-mistral-7b-instruct \
-        --input_text_file_path "./dsets/${dataset}.txt" \
-        --target_schema_path "./schemas/${dataset}_schema.csv" \
-        --logging_verbose \
-        --output_dir "./output/${dataset}_target_alignment"
+           --oie_llm 'mistralai/Mistral-7B-Instruct-v0.2' \
+           --oie_few_shot_example_file_path "./few_shot_examples/${dataset}/oie_few_shot_examples.txt" \
+           --sd_llm gpt-3.5-turbo \
+           --sd_few_shot_example_file_path "./few_shot_examples/${dataset}/sd_few_shot_examples.txt" \
+           --sc_llm gpt-3.5-turbo \
+           --sc_embedder intfloat/e5-mistral-7b-instruct \
+           --input_text_file_path "./dsets/${dataset}.txt" \
+           --target_schema_path "./schemas/${dataset}_schema.csv" \
+           --logging_verbose \
+           --output_dir "./output/${dataset}_target_alignment"
 
-done
-```
-
-Second, reproducing these experiments while tweaking the timestamps:
-
-```sh
-for dataset in 'yago2022:balanced-yago2026:retimestamped-2026' 'yago2026:balanced-yago2022:retimestamped-2022' 'yago2022_multi:balanced-yago2026_multi:retimestamped-2026' 'yago2026_multi:balanced-yago2022_multi:retimestamped-2022'; do
-
-    python run.py \
-        --oie_llm mistralai/Mistral-7B-Instruct-v0.2 \
-        --oie_few_shot_example_file_path "./few_shot_examples/${dataset}/oie_few_shot_examples.txt" \
-        --sd_llm gpt-3.5-turbo \
-        --sd_few_shot_example_file_path "./few_shot_examples/${dataset}/sd_few_shot_examples.txt" \
-        --sc_llm gpt-3.5-turbo \
-        --sc_embedder intfloat/e5-mistral-7b-instruct \
-        --input_text_file_path "./dsets/${dataset}.txt" \
-        --target_schema_path "./schemas/${dataset}_schema.csv" \
-        --logging_verbose \
-        --output_dir "./output/${dataset}_target_alignment"
+    python run_baseline.py \
+           --input_text_file_path "./dsets/${dataset}.txt" \
+           --llm 'mistralai/Mistral-7B-Instruct-v0.2' \
+           --cie_prompt_template_file_path './prompt_templates/cie_template.txt' \
+           --cie_few_shot_examples_file_path "./few_shot_examples/${dataset}/oie_few_shot_examples.txt" \
+           --target_schema_path "./schemas/${dataset}_schema.csv" \
+           --output_dir "./output/${dataset}_baseline_target_alignment"
 
 done
 ```
