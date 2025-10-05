@@ -56,7 +56,7 @@ if __name__ == "__main__":
         examples = f.read()
 
     model = AutoModelForCausalLM.from_pretrained(
-        args.llm, torch_dtype=torch.bfloat16, device_map="auto"
+        args.llm, dtype=torch.bfloat16, device_map="auto"
     )
     tokenizer = AutoTokenizer.from_pretrained(args.llm)
     extractor = Extractor(model, tokenizer)
