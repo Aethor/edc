@@ -107,3 +107,11 @@ Each dataset `$dataset` is composed of the following files:
 - `./few_shot_examples/$dataset/sd_few_shot_examples.txt`: Few-shots examples for the "Define" phase.
 - `./schemas/$dataset_schema.csv`: Relation descriptions.
 - `./evaluate/references/$dataset.txt`: Reference quadruples for each input text.
+
+## Utilities
+
+There are some utility scripts available:
+
+- `dataset2edc.py`: convert a dataset of generated facts and description into the edc format.
+- `balanced_datasets.py`: create two new datasets by balancing the relation distribution between two datasets.
+- `retimestamped_dataset.py`: create a new dataset by modifying the timestamps in a dataset.
