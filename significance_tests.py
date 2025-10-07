@@ -1,4 +1,4 @@
-from typing import Optional, Literal, TypeVar, Generator
+from typing import Optional, Literal, TypeVar, Generator, cast
 import re
 import itertools as it
 from dataclasses import dataclass
@@ -131,7 +131,7 @@ def mean_diff(arr1: np.ndarray, arr2: np.ndarray, axis: int) -> float:
 
 def test_greater(
     scores1: list[dict[MetricMode, float]], scores2: list[dict[MetricMode, float]]
-) -> dict[MetricMode, PermutationTestResult]:
+) -> dict[MetricMode, float]:
     res_dict = {}
     for mode in ["exact", "strict", "ent_type", "partial"]:
         mode = cast(MetricMode, mode)
@@ -143,46 +143,50 @@ def test_greater(
             statistic=mean_diff,
             alternative="greater",
         )
-        res_dict[mode] = res
+        res_dict[mode] = res.pvalue
     return res_dict
 
 
 xp2022 = load_xp("yago2022:balanced-yago2026")
 xp2026 = load_xp("yago2026:balanced-yago2022")
 
-xp2022_scores = list(tqdm(xp2022.flattened_scores(), ascii=True))
-xp2026_scores = list(tqdm(xp2026.flattened_scores(), ascii=True))
+xp2022_scores = list(tqdm(list(xp2022.flattened_scores()), ascii=True))
+xp2026_scores = list(tqdm(list(xp2026.flattened_scores()), ascii=True))
 print("2022 > 2026 ?")
 print(test_greater(xp2022_scores, xp2026_scores))
 
 xp2022_multi = load_xp("yago2022_multi:balanced-yago2026_multi")
 xp2026_multi = load_xp("yago2026_multi:balanced-yago2022_multi")
-xp2022_multi_scores = list(tqdm(xp2022_multi.flattened_scores(), ascii=True))
-xp2026_multi_scores = list(tqdm(xp2026_multi.flattened_scores(), ascii=True))
+xp2022_multi_scores = list(tqdm(list(xp2022_multi.flattened_scores()), ascii=True))
+xp2026_multi_scores = list(tqdm(list(xp2026_multi.flattened_scores()), ascii=True))
 print("2022_multi > 2026_multi ?")
 print(test_greater(xp2022_multi_scores, xp2026_multi_scores))
 
 xp2022_2026 = load_xp("yago2022:balanced-yago2026:retimestamped-2026")
-xp2022_2026_scores = list(tqdm(xp2022_2026.flattened_scores(), ascii=True))
+xp2022_2026_scores = list(tqdm(list(xp2022_2026.flattened_scores()), ascii=True))
 print("2022 > 2022->2026 ?")
 print(test_greater(xp2022_scores, xp2022_2026_scores))
 
 xp2026_2022 = load_xp("yago2026:balanced-yago2022:retimestamped-2022")
-xp2026_2022_scores = list(tqdm(xp2026_2022.flattened_scores(), ascii=True))
+xp2026_2022_scores = list(tqdm(list(xp2026_2022.flattened_scores()), ascii=True))
 print("2026->2022 > 2026 ?")
 print(test_greater(xp2026_2022_scores, xp2026_scores))
 
 # %%
 xp2022_multi = load_xp("yago2022_multi:balanced-yago2026_multi")
 xp2022_multi_2026 = load_xp("yago2022_multi:balanced-yago2026_multi:retimestamped-2026")
-xp2022_multi_scores = list(tqdm(xp2022_multi.flattened_scores(), ascii=True))
-xp2022_multi_2026_scores = list(tqdm(xp2022_multi_2026.flattened_scores(), ascii=True))
+xp2022_multi_scores = list(tqdm(list(xp2022_multi.flattened_scores()), ascii=True))
+xp2022_multi_2026_scores = list(
+    tqdm(list(xp2022_multi_2026.flattened_scores()), ascii=True)
+)
 print("2022_multi->2026 > 2022_multi ?")
 print(test_greater(xp2022_multi_2026_scores, xp2022_multi_scores))
 
 xp2026_multi = load_xp("yago2026_multi:balanced-yago2022_multi")
 xp2026_multi_2022 = load_xp("yago2026_multi:balanced-yago2022_multi:retimestamped-2022")
-xp2026_multi_scores = list(tqdm(xp2026_multi.flattened_scores(), ascii=True))
-xp2026_multi_2022_scores = list(tqdm(xp2026_multi_2022.flattened_scores(), ascii=True))
+xp2026_multi_scores = list(tqdm(list(xp2026_multi.flattened_scores()), ascii=True))
+xp2026_multi_2022_scores = list(
+    tqdm(list(xp2026_multi_2022.flattened_scores()), ascii=True)
+)
 print("2026_multi->2022 > 2026_multi ?")
 print(test_greater(xp2026_multi_2022_scores, xp2026_multi_scores))
