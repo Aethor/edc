@@ -77,7 +77,7 @@ for dataset in "${datasets[@]}"; do
 done
 ```
 
-This module originally comes from the [WebNLG 2020 text-to-triples evaluation script](https://github.com/WebNLG/WebNLG-Text-to-triples/tree/ea436d431752e7a033741bbf7b0120930847dd77). However, we found some bugs in the original implementation, as highlighted in the *Technical Appendix* of our article. We corrected these bugs, and performed property-based testing to ensure correctness (see `./tests/test_evaluaterefcand.py`). The original implementation it available at `./evaluate/archive.py`.
+This module originally comes from the [WebNLG 2020 text-to-triples evaluation script](https://github.com/WebNLG/WebNLG-Text-to-triples/tree/ea436d431752e7a033741bbf7b0120930847dd77). However, we found some bugs in the original implementation, as highlighted in the appendix of our article. We corrected these bugs, and performed property-based testing to ensure correctness (see `./tests/test_evaluaterefcand.py`). The original implementation it available at `./evaluate/archive.py`.
 
 
 # Details
