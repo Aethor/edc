@@ -631,6 +631,14 @@ def calculateSystemScore(
     # Get all the permutations of the number of scores given per candidate, so if there's 4 candidates, but 3 references, this part ensures that one of
     # The four will not be scored
     for idx, candidate in enumerate(newcandlist):
+        # In practice, the number of permutations can render the
+        # computation intractable. In that case, we pass that example.
+        if len(totalsemevallist[idx]) > 7:
+            print(
+                "[note] skipping an example during scoring due to the large number of possible permutations between references and candidates"
+            )
+            continue
+
         if len(newcandlist[idx]) > len(newreflist[idx]):
             # Get all permutations
             choosecands = list(
