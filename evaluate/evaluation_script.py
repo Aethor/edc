@@ -5,6 +5,7 @@ from sklearn.exceptions import UndefinedMetricWarning
 # ignore all UndefinedMetricWarning warnings
 simplefilter(action="ignore", category=UndefinedMetricWarning)
 from typing import Literal, Tuple, List, TypedDict
+import sys
 import itertools as it
 from bs4 import BeautifulSoup
 import os
@@ -635,7 +636,8 @@ def calculateSystemScore(
         # computation intractable. In that case, we pass that example.
         if len(totalsemevallist[idx]) > 7:
             print(
-                "[note] skipping an example during scoring due to the large number of possible permutations between references and candidates"
+                "[note] skipping an example during scoring due to the large number of possible permutations between references and candidates",
+                file=sys.stderr,
             )
             continue
 
