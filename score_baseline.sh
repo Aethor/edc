@@ -12,9 +12,9 @@ for model in "${models[@]}"; do
 
         echo -n "scoring ${dataset}..."
         python -m evaluate.evaluation_script\
-            --edc_output "./output/baselines/${safe_model_name}/${dataset}_target_alignment/iter0/canon_kg.txt"\
+            --edc_output "./output/baseline/${safe_model_name}/${dataset}_target_alignment/iter0/canon_kg.txt"\
             --reference "./evaluate/references/${dataset}.txt"\
-            > "./output/baselines/${safe_model_name}/${dataset}_score.txt"
+            > "./output/baseline/${safe_model_name}/${dataset}_score.txt"
         echo "done!"
     done
 

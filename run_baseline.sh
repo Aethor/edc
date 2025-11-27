@@ -17,7 +17,7 @@ for model in "${models[@]}"; do
             --cie_prompt_template_file_path './prompt_templates/cie_template.txt' \
             --cie_few_shot_examples_file_path "./few_shot_examples/${dataset}/oie_few_shot_examples.txt" \
             --target_schema_path "./schemas/${dataset}_schema.csv" \
-            --output_dir "./output/baselines/${safe_model_name}/${dataset}_target_alignment"
+            --output_dir "./output/baseline/${safe_model_name}/${dataset}_target_alignment"
 
     done
 
