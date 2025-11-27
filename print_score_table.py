@@ -6,7 +6,7 @@ import pandas as pd
 
 def get_f1(file_content: str, header: str) -> float:
     m = re.search(
-        r"Ent_type\n"
+        f"{header}\n"
         r"Correct:[^\n]+\n"
         r"Spurious:[^\n]+\n"
         r"Precision:[^\n]+\n"
@@ -34,6 +34,17 @@ def get_exact_f1(file_content: str) -> float:
     return get_f1(file_content, "Exact")
 
 
+def format_dataset_name(name: str) -> str:
+    dataset_components = re.split(r"[:_]", name)
+    dataset_name = dataset_components[0]
+    if any(c == "multi" for c in dataset_components):
+        dataset_name += "multi"
+    if any(m := re.match(r"retimestamped-([0-9]+)", c) for c in dataset_components):
+        assert not m is None
+        dataset_name = "{} => {}".format(dataset_name, m.group(1))
+    return dataset_name
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--directory", type=pl.Path)
@@ -41,7 +52,7 @@ if __name__ == "__main__":
 
     df_dict = defaultdict(list)
     for score_file in args.directory.glob("*_score.txt"):
-        dataset = score_file.name.split(":")[0]
+        dataset = format_dataset_name(score_file.name)
         df_dict["dataset"].append(dataset)
         with open(score_file) as f:
             content = f.read()
