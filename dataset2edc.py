@@ -122,7 +122,7 @@ if __name__ == "__main__":
     print(f"writing to {desc_path}...", end="")
     with open(desc_path, "w") as f:
         for example in data:
-            description = re.sub(r"\n", "", example["description"])
+            description = re.sub(r"\n", " ", example["description"])
             f.write(f"{description}\n")
     print("done!")
 
