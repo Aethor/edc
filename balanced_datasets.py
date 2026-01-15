@@ -1,34 +1,55 @@
 import argparse, shutil, ast, random, re
-from collections import Counter
+from datetime import datetime
+from collections import Counter, defaultdict
 import pathlib as pl
 
 Fact = list[str]
+
+
+def mm_dd(date: str) -> str:
+    date_dt = datetime.strptime(date, "%Y-%m-%d")
+    return date_dt.strftime("%m-%d")
 
 
 def downsample(
     fact_descs: list[str],
     ref_list: list[list[Fact]],
     rel_limit: dict[frozenset[str], int],
+    ts_limit: dict[frozenset[str], int],
 ) -> tuple[list[str], list[list[Fact]]]:
-    """Downsample a dataset in terms of relations, according to rel_limit"""
-    downsampled_indices = []
-    for rel_set in rel_limit.keys():
-        # select indices corresponding to examples with the set of
-        # relations rel_set
-        rel_indices = [
-            i
-            for i, quads in enumerate(ref_list)
-            if rel_set == set(rel for _, rel, _, _ in quads)
-        ]
-        # keep rel_limit[rel_set] of these indices at random
-        downsampled_indices += random.sample(rel_indices, k=rel_limit[rel_set])
+    """Greedily downsample a dataset in terms of relations, according
+    to rel_limit and ts_limit.
 
-    downsampled_indices = sorted(downsampled_indices)
+    :param fact_descs: list[description]
+    :param ref_list: list[list[quad] <- one list[quad] per line]
+    :param rel_limit: a dictionary mapping a set of relations to a
+        maximum number of examples to keep with that set of relations
+    :param ts_limit: a dictionary mapping a set of MM-DD timestamps to
+        a maximum number of examples to keep with that set of
+        timestamps
 
-    return (
-        [fact_descs[i] for i in downsampled_indices],
-        [ref_list[i] for i in downsampled_indices],
-    )
+    :return: a tuple with a downsampled list of fact descriptions and
+             a downsampled list of references.
+    """
+    rel_counter = defaultdict(int)
+    ts_counter = defaultdict(int)
+    downsampled_fact_descs = []
+    downampled_ref_list = []
+
+    for fact, quads in zip(fact_descs, ref_list):
+        rel_set = frozenset(rel for _, rel, _, _ in quads)
+        ts_set = frozenset(mm_dd(ts) for _, _, _, ts in quads)
+        if (
+            rel_counter[rel_set] >= rel_limit[rel_set]
+            or ts_counter[ts_set] >= ts_limit[ts_set]
+        ):
+            continue
+        downsampled_fact_descs.append(fact)
+        downampled_ref_list.append(quads)
+        rel_counter[rel_set] += 1
+        ts_counter[ts_set] += 1
+
+    return (downsampled_fact_descs, downampled_ref_list)
 
 
 def balance(
@@ -37,7 +58,8 @@ def balance(
     fact_descs2: list[str],
     ref_list2: list[list[Fact]],
 ) -> tuple[list[str], list[list[Fact]], list[str], list[list[Fact]]]:
-    """Balance two datasets in terms of relations by downsampling
+    """Balance two datasets in terms of relations and MM-DD timestamps
+    by downsampling
 
     :param fact_descs1: list[description]
     :param ref_list1: list[list[quad] <- one list[quad] per line]
@@ -58,8 +80,20 @@ def balance(
         for rel_set in all_rel_set
     }
 
-    fact_descs1, ref_list1 = downsample(fact_descs1, ref_list1, rel_limit)
-    fact_descs2, ref_list2 = downsample(fact_descs2, ref_list2, rel_limit)
+    ts_counter_1 = Counter(
+        [frozenset(mm_dd(ts) for _, _, _, ts in quads) for quads in ref_list1]
+    )
+    ts_counter_2 = Counter(
+        [frozenset(mm_dd(ts) for _, _, _, ts in quads) for quads in ref_list2]
+    )
+    all_ts_set = set(ts_counter_1.keys()).union(set(ts_counter_2.keys()))
+    ts_limit = {
+        ts_set: min(ts_counter_1.get(ts_set, 0), ts_counter_2.get(ts_set, 0))
+        for ts_set in all_ts_set
+    }
+
+    fact_descs1, ref_list1 = downsample(fact_descs1, ref_list1, rel_limit, ts_limit)
+    fact_descs2, ref_list2 = downsample(fact_descs2, ref_list2, rel_limit, ts_limit)
 
     return (fact_descs1, ref_list1, fact_descs2, ref_list2)
 
@@ -83,12 +117,14 @@ def write_balanced_dataset(
 ):
     balanced_name = f"{name}:balanced-{twin_name}"
 
+    # fact descriptions
     out_fact_descs_path = pl.Path("./dsets") / f"{balanced_name}.txt"
     print(f"writing {out_fact_descs_path}...", end="")
     with open(out_fact_descs_path, "w") as f:
         f.writelines(fact_descs)
     print("done!")
 
+    # references
     refs_path = pl.Path("./evaluate/references") / f"{balanced_name}.txt"
     print(f"writing {refs_path}...", end="")
     with open(refs_path, "w") as f:
@@ -102,6 +138,7 @@ def write_balanced_dataset(
             f.write("]\n")
     print("done!")
 
+    # few-shot examples
     in_few_shot_examples_dir = pl.Path("./few_shot_examples") / name
     out_few_shot_examples_dir = pl.Path("./few_shot_examples") / balanced_name
     print(
@@ -113,6 +150,7 @@ def write_balanced_dataset(
     )
     print("done!")
 
+    # schema
     in_schema = pl.Path("./schemas") / f"{name}_schema.csv"
     out_schema = pl.Path("./schemas") / f"{balanced_name}_schema.csv"
     print(f"copying schema file {in_schema} to {out_schema}...", end="")

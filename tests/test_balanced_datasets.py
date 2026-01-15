@@ -1,7 +1,16 @@
 from hypothesis import given, assume, strategies as st
+from datetime import datetime
 from balanced_datasets import balance
 
 Facts = list[str]
+
+
+@st.composite
+def st_YYYY_MM_DD(draw):
+    dt = draw(
+        st.datetimes(min_value=datetime(1000, 1, 1), max_value=datetime(9999, 12, 31))
+    )
+    return dt.strftime("%Y-%m-%d")
 
 
 def test_balance_trivial():
@@ -26,12 +35,14 @@ def test_balance_trivial():
 @given(
     st.lists(
         st.tuples(
-            st.text(), st.lists(st.tuples(st.text(), st.text(), st.text(), st.text()))
+            st.text(),
+            st.lists(st.tuples(st.text(), st.text(), st.text(), st_YYYY_MM_DD())),
         )
     ),
     st.lists(
         st.tuples(
-            st.text(), st.lists(st.tuples(st.text(), st.text(), st.text(), st.text()))
+            st.text(),
+            st.lists(st.tuples(st.text(), st.text(), st.text(), st_YYYY_MM_DD())),
         ),
     ),
 )
@@ -58,12 +69,14 @@ def test_balanced_is_smaller(
 @given(
     st.lists(
         st.tuples(
-            st.text(), st.lists(st.tuples(st.text(), st.text(), st.text(), st.text()))
+            st.text(),
+            st.lists(st.tuples(st.text(), st.text(), st.text(), st_YYYY_MM_DD())),
         )
     ),
     st.lists(
         st.tuples(
-            st.text(), st.lists(st.tuples(st.text(), st.text(), st.text(), st.text()))
+            st.text(),
+            st.lists(st.tuples(st.text(), st.text(), st.text(), st_YYYY_MM_DD())),
         ),
     ),
 )
