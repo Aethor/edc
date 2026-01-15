@@ -1,5 +1,5 @@
 from typing import Optional, Literal, TypeVar, Generator, cast
-import re
+import re, sys
 import itertools as it
 from dataclasses import dataclass
 from scipy.stats import permutation_test
@@ -17,8 +17,18 @@ S = TypeVar("S")
 
 
 def mappings(lst1: list[T], lst2: list[S]) -> Generator[tuple[tuple[T, S]], None, None]:
+    i = 0
     for perm in it.permutations(lst2, len(lst1)):
         yield tuple(zip(lst1, perm))  # type: ignore
+        # In practice, the number of permutations can render the
+        # computation intractable. In that case, we pass that example.
+        i += 1
+        if i >= 1024:
+            print(
+                "[note] skipping an example during scoring due to the large number of possible permutations between references and candidates",
+                file=sys.stderr,
+            )
+            return
 
 
 def _cleanup_evaluaterefcand_quad(quad: str) -> str:
@@ -97,8 +107,7 @@ class XP:
             yield XPExample(text, ref, pred)
 
     def __len__(self) -> int:
-        assert len({len(self.texts), len(self.refs), len(self.preds)}) == 1
-        return len(self.texts)
+        return sum(max(len(r), len(p)) for r, p in zip(self.refs, self.preds))
 
     def flattened_scores(self) -> Generator[dict[MetricMode, float], None, None]:
         for ex in self.examples():
@@ -106,7 +115,7 @@ class XP:
                 yield score_dict
 
 
-def load_xp(name: str) -> XP:
+def load_xp(name: str, system: str, model: str) -> XP:
     texts = []
     refs = []
     preds = []
@@ -116,13 +125,15 @@ def load_xp(name: str) -> XP:
     with open(f"./evaluate/references/{name}.txt") as f:
         for line in f:
             refs.append(eval(line))
-    with open(f"./output/{name}_target_alignment/iter0/canon_kg.txt") as f:
+    pred_path = f"./output/{system}/{model}/{name}_target_alignment/iter0/canon_kg.txt"
+    with open(pred_path) as f:
         for line in f:
-            preds.append(eval(line))
+            try:
+                preds.append(eval(line))
+            except TypeError:
+                print(f"{pred_path=} error while loading line : {line=}")
+                continue
     return XP(texts, refs, preds)
-
-
-# %%
 
 
 def mean_diff(arr1: np.ndarray, arr2: np.ndarray, axis: int) -> float:
@@ -147,46 +158,72 @@ def test_greater(
     return res_dict
 
 
-xp2022 = load_xp("yago2022:balanced-yago2026")
-xp2026 = load_xp("yago2026:balanced-yago2022")
+if __name__ == "__main__":
+    for system, model in [
+        ("edc", "mistralai:Mistral-7B-Instruct-v0.2"),
+        ("baseline", "mistralai:Mistral-7B-Instruct-v0.2"),
+        ("baseline", "meta-llama:Llama-3.1-8B"),
+    ]:
+        print(f"==={system=} {model=}===")
+        xp2022 = load_xp("yago2022:balanced-yago2026", system, model)
+        xp2026 = load_xp("yago2026:balanced-yago2022", system, model)
 
-xp2022_scores = list(tqdm(list(xp2022.flattened_scores()), ascii=True))
-xp2026_scores = list(tqdm(list(xp2026.flattened_scores()), ascii=True))
-print("2022 > 2026 ?")
-print(test_greater(xp2022_scores, xp2026_scores))
+        xp2022_scores = list(tqdm(xp2022.flattened_scores(), total=len(xp2022)))
+        xp2026_scores = list(tqdm(xp2026.flattened_scores(), total=len(xp2026)))
+        print("2022 > 2026 ?")
+        print(test_greater(xp2022_scores, xp2026_scores))
 
-xp2022_multi = load_xp("yago2022_multi:balanced-yago2026_multi")
-xp2026_multi = load_xp("yago2026_multi:balanced-yago2022_multi")
-xp2022_multi_scores = list(tqdm(list(xp2022_multi.flattened_scores()), ascii=True))
-xp2026_multi_scores = list(tqdm(list(xp2026_multi.flattened_scores()), ascii=True))
-print("2022_multi > 2026_multi ?")
-print(test_greater(xp2022_multi_scores, xp2026_multi_scores))
+        xp2022_multi = load_xp("yago2022_multi:balanced-yago2026_multi", system, model)
+        xp2026_multi = load_xp("yago2026_multi:balanced-yago2022_multi", system, model)
+        xp2022_multi_scores = list(
+            tqdm(xp2022_multi.flattened_scores(), total=len(xp2022_multi))
+        )
+        xp2026_multi_scores = list(
+            tqdm(xp2026_multi.flattened_scores(), total=len(xp2026_multi))
+        )
+        print("2022_multi > 2026_multi ?")
+        print(test_greater(xp2022_multi_scores, xp2026_multi_scores))
 
-xp2022_2026 = load_xp("yago2022:balanced-yago2026:retimestamped-2026")
-xp2022_2026_scores = list(tqdm(list(xp2022_2026.flattened_scores()), ascii=True))
-print("2022 > 2022->2026 ?")
-print(test_greater(xp2022_scores, xp2022_2026_scores))
+        xp2022_2026 = load_xp(
+            "yago2022:balanced-yago2026:retimestamped-2026", system, model
+        )
+        xp2022_2026_scores = list(
+            tqdm(xp2022_2026.flattened_scores(), total=len(xp2022_2026))
+        )
+        print("2022 > 2022->2026 ?")
+        print(test_greater(xp2022_scores, xp2022_2026_scores))
 
-xp2026_2022 = load_xp("yago2026:balanced-yago2022:retimestamped-2022")
-xp2026_2022_scores = list(tqdm(list(xp2026_2022.flattened_scores()), ascii=True))
-print("2026->2022 > 2026 ?")
-print(test_greater(xp2026_2022_scores, xp2026_scores))
+        xp2026_2022 = load_xp(
+            "yago2026:balanced-yago2022:retimestamped-2022", system, model
+        )
+        xp2026_2022_scores = list(
+            tqdm(xp2026_2022.flattened_scores(), total=len(xp2026_2022))
+        )
+        print("2026->2022 > 2026 ?")
+        print(test_greater(xp2026_2022_scores, xp2026_scores))
 
-# %%
-xp2022_multi = load_xp("yago2022_multi:balanced-yago2026_multi")
-xp2022_multi_2026 = load_xp("yago2022_multi:balanced-yago2026_multi:retimestamped-2026")
-xp2022_multi_scores = list(tqdm(list(xp2022_multi.flattened_scores()), ascii=True))
-xp2022_multi_2026_scores = list(
-    tqdm(list(xp2022_multi_2026.flattened_scores()), ascii=True)
-)
-print("2022_multi->2026 > 2022_multi ?")
-print(test_greater(xp2022_multi_2026_scores, xp2022_multi_scores))
+        xp2022_multi = load_xp("yago2022_multi:balanced-yago2026_multi", system, model)
+        xp2022_multi_2026 = load_xp(
+            "yago2022_multi:balanced-yago2026_multi:retimestamped-2026", system, model
+        )
+        xp2022_multi_scores = list(
+            tqdm(xp2022_multi.flattened_scores(), total=len(xp2022_multi))
+        )
+        xp2022_multi_2026_scores = list(
+            tqdm(xp2022_multi_2026.flattened_scores(), total=len(xp2022_multi_2026))
+        )
+        print("2022_multi->2026 > 2022_multi ?")
+        print(test_greater(xp2022_multi_2026_scores, xp2022_multi_scores))
 
-xp2026_multi = load_xp("yago2026_multi:balanced-yago2022_multi")
-xp2026_multi_2022 = load_xp("yago2026_multi:balanced-yago2022_multi:retimestamped-2022")
-xp2026_multi_scores = list(tqdm(list(xp2026_multi.flattened_scores()), ascii=True))
-xp2026_multi_2022_scores = list(
-    tqdm(list(xp2026_multi_2022.flattened_scores()), ascii=True)
-)
-print("2026_multi->2022 > 2026_multi ?")
-print(test_greater(xp2026_multi_2022_scores, xp2026_multi_scores))
+        xp2026_multi = load_xp("yago2026_multi:balanced-yago2022_multi", system, model)
+        xp2026_multi_2022 = load_xp(
+            "yago2026_multi:balanced-yago2022_multi:retimestamped-2022", system, model
+        )
+        xp2026_multi_scores = list(
+            tqdm(xp2026_multi.flattened_scores(), total=len(xp2026_multi))
+        )
+        xp2026_multi_2022_scores = list(
+            tqdm(xp2026_multi_2022.flattened_scores(), total=len(xp2026_multi_2022))
+        )
+        print("2026_multi->2022 > 2026_multi ?")
+        print(test_greater(xp2026_multi_2022_scores, xp2026_multi_scores))
