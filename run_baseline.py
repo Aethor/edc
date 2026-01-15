@@ -68,6 +68,6 @@ if __name__ == "__main__":
                 text, examples, prompt_template, relations_hint=", ".join(relations)
             )
             f.write(str(quads))
-            if i != len(quads) - 1:
+            if i != len(input_text_list) - 1:
                 f.write("\n")
             f.flush()
