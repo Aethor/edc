@@ -1,6 +1,6 @@
 from typing import Dict
 import os
-import openai
+from openai import OpenAI
 import time
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 import ast
@@ -186,7 +186,10 @@ def generate_completion_transformers(
 def openai_chat_completion(
     model, system_prompt, history, temperature=0, max_tokens=512
 ) -> str:
-    openai.api_key = os.environ["OPENAI_KEY"]
+    client = OpenAI(
+        base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1/"),
+        api_key=os.environ["OPENAI_KEY"],
+    )
     response = None
     if system_prompt is not None:
         messages = [{"role": "system", "content": system_prompt}] + history
@@ -194,7 +197,7 @@ def openai_chat_completion(
         messages = history
     while response is None:
         try:
-            response = openai.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
