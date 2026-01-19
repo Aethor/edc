@@ -1,34 +1,20 @@
 from typing import Optional, Literal, TypeVar, Generator, cast
-import re, sys
+import re, sys, contextlib
 import itertools as it
 from dataclasses import dataclass
 from scipy.stats import permutation_test
 from scipy.stats._resampling import PermutationTestResult
 import numpy as np
 from tqdm import tqdm
-from evaluate.evaluation_script import evaluaterefcand
+from evaluate.evaluation_script import (
+    evaluaterefcand,
+    calculateAllScores,
+    calculateSystemScore,
+)
 from unidecode import unidecode
 
 Fact = list[Optional[str]]
-MetricMode = Literal["exact", "strict", "partial", "ent_type"]
-
-T = TypeVar("T")
-S = TypeVar("S")
-
-
-def mappings(lst1: list[T], lst2: list[S]) -> Generator[tuple[tuple[T, S]], None, None]:
-    i = 0
-    for perm in it.permutations(lst2, len(lst1)):
-        yield tuple(zip(lst1, perm))  # type: ignore
-        # In practice, the number of permutations can render the
-        # computation intractable. In that case, we pass that example.
-        i += 1
-        if i >= 1024:
-            print(
-                "[note] skipping an example during scoring due to the large number of possible permutations between references and candidates",
-                file=sys.stderr,
-            )
-            return
+MetricMode = Literal["exact", "strict", "ent_type", "partial"]
 
 
 def _cleanup_evaluaterefcand_quad(quad: str) -> str:
@@ -45,74 +31,36 @@ def _cleanup_evaluaterefcand_quad(quad: str) -> str:
 
 
 @dataclass
-class XPExample:
-    text: str
-    ref: list[Fact]
-    pred: list[Fact]
-
-    def score(self) -> list[dict[MetricMode, float]]:
-        # equalize the length of ref/pred. This is done so that it it
-        # possible to map each ref quadruple to each pred quadruple
-        # one-to-one.
-        ref = self.ref + [""] * (len(self.pred) - len(self.ref))
-        pred = self.pred + [""] * (len(self.ref) - len(self.pred))
-
-        # pred has possible 'None' in its quadruples. Transform them
-        # to "" to match the original implementation
-        pred = [[elt if not elt is None else "" for elt in fact] for fact in pred]
-
-        best_scores = []
-        best_mean = 0.0
-        cache = {}
-        for mapping in mappings(ref, pred):
-            mapping_scores = []
-            for ref_fact, pred_fact in mapping:
-                cache_key = (tuple(ref_fact), tuple(pred_fact))
-                if cache_key in cache:
-                    results = cache[cache_key]
-                else:
-                    try:
-                        results, _ = evaluaterefcand(
-                            _cleanup_evaluaterefcand_quad(" | ".join(ref_fact)),
-                            _cleanup_evaluaterefcand_quad(" | ".join(pred_fact)),
-                        )
-                        cache[cache_key] = results
-                    except TypeError:
-                        continue
-                mapping_scores.append(
-                    {
-                        "exact": results["exact"]["f1"],
-                        "strict": results["strict"]["f1"],
-                        "partial": results["partial"]["f1"],
-                        "ent_type": results["ent_type"]["f1"],
-                    }
-                )
-
-            mean = sum(sum(score.values()) for score in mapping_scores)
-            if mean >= best_mean:
-                best_mean = mean
-                best_scores = mapping_scores
-
-        return best_scores
-
-
-@dataclass
 class XP:
     texts: list[str]
     refs: list[list[Fact]]
     preds: list[list[Fact]]
 
-    def examples(self) -> Generator[XPExample, None, None]:
-        for text, ref, pred in zip(self.texts, self.refs, self.preds):
-            yield XPExample(text, ref, pred)
-
-    def __len__(self) -> int:
-        return sum(max(len(r), len(p)) for r, p in zip(self.refs, self.preds))
-
-    def flattened_scores(self) -> Generator[dict[MetricMode, float], None, None]:
-        for ex in self.examples():
-            for score_dict in ex.score():
-                yield score_dict
+    def scores(self) -> list[dict[MetricMode, float]]:
+        # the WebNLG eval script takes quadruples with each element
+        # separated with pipes
+        refs = [
+            [_cleanup_evaluaterefcand_quad(" | ".join(quad)) for quad in ref]
+            for ref in self.refs
+        ]
+        preds = [
+            [_cleanup_evaluaterefcand_quad(" | ".join(quad)) for quad in pred]
+            for pred in self.preds
+        ]
+        totalsemevallist, totalsemevallistpertag = calculateAllScores(refs, preds)
+        with contextlib.redirect_stdout(None):
+            score_dicts, *_ = calculateSystemScore(
+                totalsemevallist, totalsemevallistpertag, refs, preds
+            )
+        return [
+            {
+                "exact": (d["exact"]["f1"]),
+                "strict": d["strict"]["f1"],
+                "partial": d["partial"]["f1"],
+                "ent_type": d["ent_type"]["f1"],
+            }
+            for d in score_dicts
+        ]  # type: ignore
 
 
 def load_xp(name: str, system: str, model: str) -> XP:
@@ -168,37 +116,29 @@ if __name__ == "__main__":
         xp2022 = load_xp("yago2022:balanced-yago2026", system, model)
         xp2026 = load_xp("yago2026:balanced-yago2022", system, model)
 
-        xp2022_scores = list(tqdm(xp2022.flattened_scores(), total=len(xp2022)))
-        xp2026_scores = list(tqdm(xp2026.flattened_scores(), total=len(xp2026)))
+        xp2022_scores = xp2022.scores()
+        xp2026_scores = xp2026.scores()
         print("2022 > 2026 ?")
         print(test_greater(xp2022_scores, xp2026_scores))
 
         xp2022_multi = load_xp("yago2022_multi:balanced-yago2026_multi", system, model)
         xp2026_multi = load_xp("yago2026_multi:balanced-yago2022_multi", system, model)
-        xp2022_multi_scores = list(
-            tqdm(xp2022_multi.flattened_scores(), total=len(xp2022_multi))
-        )
-        xp2026_multi_scores = list(
-            tqdm(xp2026_multi.flattened_scores(), total=len(xp2026_multi))
-        )
+        xp2022_multi_scores = xp2022_multi.scores()
+        xp2026_multi_scores = xp2026_multi.scores()
         print("2022_multi > 2026_multi ?")
         print(test_greater(xp2022_multi_scores, xp2026_multi_scores))
 
         xp2022_2026 = load_xp(
             "yago2022:balanced-yago2026:retimestamped-2026", system, model
         )
-        xp2022_2026_scores = list(
-            tqdm(xp2022_2026.flattened_scores(), total=len(xp2022_2026))
-        )
+        xp2022_2026_scores = xp2022_2026.scores()
         print("2022 > 2022->2026 ?")
         print(test_greater(xp2022_scores, xp2022_2026_scores))
 
         xp2026_2022 = load_xp(
             "yago2026:balanced-yago2022:retimestamped-2022", system, model
         )
-        xp2026_2022_scores = list(
-            tqdm(xp2026_2022.flattened_scores(), total=len(xp2026_2022))
-        )
+        xp2026_2022_scores = xp2026_2022.scores()
         print("2026->2022 > 2026 ?")
         print(test_greater(xp2026_2022_scores, xp2026_scores))
 
@@ -206,12 +146,8 @@ if __name__ == "__main__":
         xp2022_multi_2026 = load_xp(
             "yago2022_multi:balanced-yago2026_multi:retimestamped-2026", system, model
         )
-        xp2022_multi_scores = list(
-            tqdm(xp2022_multi.flattened_scores(), total=len(xp2022_multi))
-        )
-        xp2022_multi_2026_scores = list(
-            tqdm(xp2022_multi_2026.flattened_scores(), total=len(xp2022_multi_2026))
-        )
+        xp2022_multi_scores = xp2022_multi.scores()
+        xp2022_multi_2026_scores = xp2022_multi_2026.scores()
         print("2022_multi->2026 > 2022_multi ?")
         print(test_greater(xp2022_multi_2026_scores, xp2022_multi_scores))
 
@@ -219,11 +155,7 @@ if __name__ == "__main__":
         xp2026_multi_2022 = load_xp(
             "yago2026_multi:balanced-yago2022_multi:retimestamped-2022", system, model
         )
-        xp2026_multi_scores = list(
-            tqdm(xp2026_multi.flattened_scores(), total=len(xp2026_multi))
-        )
-        xp2026_multi_2022_scores = list(
-            tqdm(xp2026_multi_2022.flattened_scores(), total=len(xp2026_multi_2022))
-        )
+        xp2026_multi_scores = xp2026_multi.scores()
+        xp2026_multi_2022_scores = xp2026_multi_2022.scores()
         print("2026_multi->2022 > 2026_multi ?")
         print(test_greater(xp2026_multi_2022_scores, xp2026_multi_scores))
