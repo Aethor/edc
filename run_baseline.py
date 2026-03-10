@@ -4,6 +4,7 @@ from tqdm import tqdm
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from edc.extract import Extractor
+from edc.utils import llm_utils
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -14,8 +15,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--llm",
-        default="mistralai/Mistral-7B-Instruct-v0.2",
-        help="LLM used for information extraction",
+        default="hf:mistralai/Mistral-7B-Instruct-v0.2",
+        help="LLM used for information extraction. Prefix by 'hf' to use a local huggingface implementation, or 'openai' to use the OpenAI client.",
     )
     parser.add_argument(
         "--cie_prompt_template_file_path",
@@ -55,11 +56,17 @@ if __name__ == "__main__":
     with open(args.cie_few_shot_examples_file_path) as f:
         examples = f.read()
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.llm, torch_dtype=torch.bfloat16, device_map="auto"
-    )
-    tokenizer = AutoTokenizer.from_pretrained(args.llm)
-    extractor = Extractor(model, tokenizer)
+    if llm_utils.is_model_huggingface(args.llm):
+        raw_name = llm_utils.get_model_raw_name(args.llm)
+        model = AutoModelForCausalLM.from_pretrained(
+            raw_name, torch_dtype=torch.bfloat16, device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(raw_name)
+        extractor = Extractor(model, tokenizer)
+    elif llm_utils.is_model_openai(args.llm):
+        extractor = Extractor(openai_model=llm_utils.get_model_raw_name(args.llm))
+    else:
+        raise ValueError(args.llm)
 
     os.makedirs(f"{args.output_dir}/iter0", exist_ok=True)
     with open(f"{args.output_dir}/iter0/canon_kg.txt", "w") as f:

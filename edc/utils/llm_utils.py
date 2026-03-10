@@ -142,8 +142,16 @@ def parse_relation_definition(raw_definitions: str) -> Dict[str, str]:
     return relation_definition_dict
 
 
-def is_model_openai(model_name):
-    return "gpt" in model_name
+def is_model_openai(model_name: str) -> bool:
+    return model_name.startswith("openai:")
+
+
+def is_model_huggingface(model_name: str) -> bool:
+    return model_name.startswith("hf:")
+
+
+def get_model_raw_name(model_name: str) -> str:
+    return model_name[model_name.index(":") + 1 :]
 
 
 def generate_completion_transformers(

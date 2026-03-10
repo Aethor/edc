@@ -101,9 +101,11 @@ class EDC:
         previous_extracted_quadruples_list: Optional[List[List[List[str]]]] = None,
         free_model=False,
     ) -> Tuple[List[List[List[str]]], List[str], List[str]]:
-        if not llm_utils.is_model_openai(self.oie_llm_name):
+        if llm_utils.is_model_huggingface(self.oie_llm_name):
             # Load the HF model for OIE
-            oie_model, oie_tokenizer = self.load_model(self.oie_llm_name, "hf")
+            oie_model, oie_tokenizer = self.load_model(
+                llm_utils.get_model_raw_name(self.oie_llm_name), "hf"
+            )
             # if self.oie_llm_name not in self.loaded_model_dict:
             #     logger.info(f"Loading model {self.oie_llm_name}.")
             #     oie_model, oie_tokenizer = (
@@ -115,8 +117,12 @@ class EDC:
             #     logger.info(f"Model {self.oie_llm_name} is already loaded, reusing it.")
             #     oie_model, oie_tokenizer = self.loaded_model_dict[self.oie_llm_name]
             extractor = Extractor(oie_model, oie_tokenizer)
+        elif llm_utils.is_model_openai(self.oie_llm_name):
+            extractor = Extractor(
+                openai_model=llm_utils.get_model_raw_name(self.oie_llm_name)
+            )
         else:
-            extractor = Extractor(openai_model=self.oie_llm_name)
+            raise ValueError(self.oie_llm_name)
 
         oie_quadruples_list: List[List[List[str]]] = []
         entity_hint_list = None
@@ -180,7 +186,7 @@ class EDC:
 
         return oie_quadruples_list, entity_hint_list, relation_hint_list
 
-    def load_model(self, model_name, model_type):
+    def load_model(self, model_name: str, model_type: str):
         assert model_type in [
             "sts",
             "hf",
@@ -214,12 +220,18 @@ class EDC:
     ):
         assert len(input_text_list) == len(oie_quads_list)
 
-        if not llm_utils.is_model_openai(self.sd_llm_name):
+        if llm_utils.is_model_huggingface(self.sd_llm_name):
             # Load the HF model for Schema Definition
-            sd_model, sd_tokenizer = self.load_model(self.sd_llm_name, "hf")
+            sd_model, sd_tokenizer = self.load_model(
+                llm_utils.get_model_raw_name(self.sd_llm_name), "hf"
+            )
             schema_definer = SchemaDefiner(model=sd_model, tokenizer=sd_tokenizer)
+        elif llm_utils.is_model_openai(self.sd_llm_name):
+            schema_definer = SchemaDefiner(
+                openai_model=llm_utils.get_model_raw_name(self.sd_llm_name)
+            )
         else:
-            schema_definer = SchemaDefiner(openai_model=self.sd_llm_name)
+            raise ValueError(self.sd_llm_name)
 
         schema_definition_few_shot_prompt_template_str = open(
             self.sd_template_file_path
@@ -265,18 +277,22 @@ class EDC:
 
         sc_embedder = self.load_model(self.sc_embedder_name, "sts")
 
-        if not llm_utils.is_model_openai(self.sc_llm_name):
+        if llm_utils.is_model_huggingface(self.sc_llm_name):
             sc_verify_model, sc_verify_tokenizer = self.load_model(
-                self.sc_llm_name, "sts"
+                llm_utils.get_model_raw_name(self.sc_llm_name), "sts"
             )
             schema_canonicalizer = SchemaCanonicalizer(
                 self.schema, sc_embedder, sc_verify_model, sc_verify_tokenizer
             )
-        else:
+        elif llm_utils.is_model_openai(self.sc_llm_name):
             schema_canonicalizer = SchemaCanonicalizer(
-                self.schema, sc_embedder, verify_openai_model=self.sc_llm_name
+                self.schema,
+                sc_embedder,
+                verify_openai_model=llm_utils.get_model_raw_name(self.sc_llm_name),
             )
             sc_verify_model, sc_verify_tokenizer = None, None
+        else:
+            raise ValueError(self.sc_llm_name)
 
         canonicalized_quads_list: List[List[Optional[List[str]]]] = []
         canon_candidate_dict_per_entry_list: List[List[dict]] = []
