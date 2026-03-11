@@ -214,6 +214,8 @@ def openai_chat_completion(
         except Exception as e:
             time.sleep(5)
     result = response.choices[0].message.content
-    assert not result is None
+    if result is None:
+        print(f"warning: no content returned by LLM")
+        result = ""
     logging.debug(f"Model: {model}\nPrompt:\n {messages}\n Result: {result}")
     return result
