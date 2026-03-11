@@ -43,7 +43,6 @@ class Extractor:
         messages = [{"role": "user", "content": filled_prompt}]
 
         if self.openai_model is None:
-            # llm_utils.generate_completion_transformers([messages], self.model, self.tokenizer, device=self.device)
             completion = llm_utils.generate_completion_transformers(
                 messages, self.model, self.tokenizer, answer_prepend="Quadruples: "
             )

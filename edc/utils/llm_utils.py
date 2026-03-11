@@ -1,5 +1,5 @@
 from typing import Dict
-import os
+import os, re
 from openai import OpenAI
 import time
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
@@ -73,7 +73,16 @@ def get_embedding_sts(
     return embedding
 
 
+def trim_thinking(model_output: str) -> str:
+    think_end_search = re.search(r"</think>", model_output)
+    if not think_end_search is None:
+        return model_output[think_end_search.span()[1] :]
+    return model_output
+
+
 def parse_raw_entities(raw_entities: str) -> List[str]:
+    raw_entities = trim_thinking(raw_entities)
+
     parsed_entities = []
     left_bracket_idx = raw_entities.index("[")
     right_bracket_idx = raw_entities.index("]")
@@ -88,6 +97,8 @@ def parse_raw_entities(raw_entities: str) -> List[str]:
 
 
 def parse_raw_quadruples(raw_quadruples: str) -> List[List[str]]:
+    raw_quadruples = trim_thinking(raw_quadruples)
+
     # Look for enclosing brackets
     unmatched_left_bracket_indices = []
     matched_bracket_pairs = []
@@ -121,6 +132,8 @@ def parse_raw_quadruples(raw_quadruples: str) -> List[List[str]]:
 
 
 def parse_relation_definition(raw_definitions: str) -> Dict[str, str]:
+    raw_definitions = trim_thinking(raw_definitions)
+
     descriptions = raw_definitions.split("\n")
     relation_definition_dict = {}
 
