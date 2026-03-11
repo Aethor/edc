@@ -621,7 +621,10 @@ def calculateAllScores(newreflist: list[list[str]], newcandlist: list[list[str]]
 
 
 def calculateSystemScore(
-    totalsemevallist, totalsemevallistpertag, newreflist, newcandlist
+    totalsemevallist: List[List[List[dict]]],
+    totalsemevallistpertag: List[List[List[dict]]],
+    newreflist: List[List[str]],
+    newcandlist: List[List[str]],
 ):
     selectedsemevallist = []
     selectedsemevallistpertag = []
