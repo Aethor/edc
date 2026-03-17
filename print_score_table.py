@@ -14,7 +14,7 @@ def get_f1(file_content: str, header: str) -> float:
         file_content,
     )
     if m is None:
-        raise ValueError("Cannot find type F1")
+        raise ValueError(f"Cannot find {header} F1")
     return float(m.groups()[0])
 
 
