@@ -2,15 +2,11 @@ startAcademicDegree,The subject entity started working through the degree specif
 endAcademicDegree,The subject entity obtained the degree specified by the object entity
 startActor,The subject entity started having an actor specified by the object entity
 endActor,The subject entity ended its association with the actor specified by the object entity
-startAlumniOf,The subject entity started a student or member position the organization specified by the object entity
-endAlumniOf,The subject entity ended its student or member position with the organization specified by the object entity
 startAppearsIn,The subject entity started appearing in the creative work specified by the object entity
 endAppearsIn,The subject entity no longer appears in the creative work specified by the object entity
-startAward,The subject entity has won the award specified by the object entity
-endAward,The subject entity ended its possession of the award specified by the object entity
 startBeliefSystem,The subject entity started adhering to the belief system specified by the object entity
 endBeliefSystem,The subject entity no longer adheres to the belief system specified by the object entity
-startCapital,The subject entity started having the object entity for capital
+startCandidateIn,The subject entity started a candidature in the object entity (an event)
 endCapital,The subject entity no longer has the object entity for capital
 startConferredBy,The subject entity started being conferred by the object entity
 endConferredBy,The subject entity is no longer conferred by the object entity
@@ -26,14 +22,12 @@ startFlowsInto,The subject entity started flowing into the object entity
 endFlowsInto,The subject entity no longer flows into the object entity
 startGender,The subject entity started having the gender specified by the object entity
 endGender,The subject entity no longer has the gender specified by the object entity
-startHomeLocation,The subject entity's home started being at the location specified by the object entity
-endHomeLocation,The subject entity's home no longer is at the location specified by the object entity
 startInLanguage,The subject entity started being in the language specified by the object entity
 endInLanguage,The subject entity is no longer in the language specified by the object entity
 startLeader,The subject entity started being lead by the object entity
 endLeader,The subject entity is no longer lead by the object entity
-startLocation,The subject entity started being at the location specified by the object entity
-endLocation,The subject entity no longer is at the location specified by the object entity
+startLowestPoint,The subject entity (a location) started having the object entity as its lowest point
+endLowestPoint,The subject entity (a location) stopped having the object entity as its lowest point
 startManufacturer,The subject entity started being manufactured by the organization specified by the object entity
 endManufacturer,The subject entity is no longer manufactured by the organization specified by the object entity
 startMaterial,The subject entity started being made of the material specified by the object entity
@@ -44,15 +38,15 @@ startMusicBy,The music of the subject entity started being composed by the objec
 endMusicBy,The music of the subject entity is no longer composed by the object entity
 startNationality,The subject entity acquired the nationality specified by the object entity
 endNationality,The subject entity lost the nationality specified by the object entity
-startNeighbors,The subject entity started neighboring the object entity
-endNeighbors,The subject entity is no longer neighboring the object entity
 startNotableWork,The subject entity started working on its its notable work specified by the object entity
 endNotableWork,The subject entity no longer works on its notable work specified by the object entity
+startOfficialLanguage,The subject entity (a country) started having the object entity as an official language
+endOfficialLanguage,The subject entity (a country) stopped having the object entity as an official language
 startOrganizer,The subject entity started being organized by the object entity
 endOrganizer,The subject entity is no longer organized by the object entity
 startOwnedBy,The subject entity started being owned by the object entity
 endOwnedBy,The subject entity is no longer owned by the object entity
-startOwn,The subject entity started owning the object entity
+startOwns,The subject entity started owning the object entity
 endOwns,The subject entity no longer owns the object entity
 startParticipant,The subject entity started having a participant specified by the object entity
 endParticipant,The subject entity no longer has a participant specified by the object entity
@@ -72,11 +66,19 @@ startSponsor,The subject entity started being sponsored by the object entity
 endSponsor,The subject entity is no longer sponsored by the object entity
 startSportNumber,The subject entity's sport number started being the object entity
 endSportNumber,The subject entity's sport number no longer is the object entity
-startSpouse,The subject entity started a marriage with the object entity
-endSpouse,The subject entity ended their marriage with the object entity
 startStudentOf,The subject entity started being a student of the object entity
 endStudentOf,The subject entity no longer is a student of the object entity
+startSuperEvent,The subject entity started being a sub-event of the object entity
+endSuperEvent,The subject entity stopped being a sub-event of the object entity
 startTerminus,The terminus of the subject entity started being the object entity
 endTerminus,The terminus of the subject entity no longer is the object entity
 startWorksFor,The subject entity started working for the organization specified by the object entity
 endWorksFor,The subject entity no longer works for the organization specified by the object entity
+award,The subject entity obtained the award specified by the object entity
+children,The object entity is the child of the subject entity
+follows,The subject entity (an event) follows the object entity (an event) in time
+founder,The subject entity was founded by the object entity
+influencedBy,The subject entity was influenced or inspired by the object entity
+knowsLanguage,The subject entity (a person) knows the object entity (a language)
+locationCreated,The subject entity was created at the object entity (a location)
+lyricist,The subject entity's lyricist is the object entity
