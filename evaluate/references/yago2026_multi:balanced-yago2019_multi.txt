@@ -1,1 +1,0 @@
-[['Mikel Méndez', 'award', 'Doctor of Philosophy generic instance', '2026-01-01'], ['Peter M Chapple', 'startAcademicDegree', 'Doctor of Philosophy generic instance', '2026-01-01'], ['Piotr Hajłasz', 'award', 'Doctor of Philosophy generic instance', '2026-01-01'], ['Hadi Sacko', 'award', 'Doctor of Philosophy generic instance', '2026-01-01']]

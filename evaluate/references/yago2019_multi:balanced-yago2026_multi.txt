@@ -1,2 +1,0 @@
-[['Andrea Young', 'award', 'Presidential Early Career Award for Scientists and Engineers', '2019-01-01'], ['Eugenia Maresch', 'award', 'Commander Of The Order Of Polonia Restituta generic instance', '2019-01-01'], ['Oriana Bandiera', 'award', 'Yrjö Jahnsson Award', '2019-01-01'], ['Médecins Sans Frontières', 'award', 'Josep Trueta Plaque', '2019-01-01']]
-[['Frédéric Blachon', 'award', 'Commander Of The National Order Of Mali generic instance', '2019-01-01'], ['Bajrakitiyabha', 'award', 'Order of the Nine Gems', '2019-01-01']]

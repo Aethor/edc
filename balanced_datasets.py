@@ -6,50 +6,53 @@ import pathlib as pl
 Fact = list[str]
 
 
-def mm_dd(date: str) -> str:
+def mm(date: str) -> str:
     date_dt = datetime.strptime(date, "%Y-%m-%d")
-    return date_dt.strftime("%m-%d")
+    return date_dt.strftime("%m")
 
 
-def downsample(
+def downsample_rel(
     fact_descs: list[str],
     ref_list: list[list[Fact]],
-    rel_limit: dict[frozenset[str], int],
-    ts_limit: dict[frozenset[str], int],
+    rel_limit: dict[str, int],
 ) -> tuple[list[str], list[list[Fact]]]:
-    """Greedily downsample a dataset in terms of relations, according
-    to rel_limit and ts_limit.
+    """Downsample a dataset in terms of relations
 
     :param fact_descs: list[description]
     :param ref_list: list[list[quad] <- one list[quad] per line]
-    :param rel_limit: a dictionary mapping a set of relations to a
-        maximum number of examples to keep with that set of relations
-    :param ts_limit: a dictionary mapping a set of MM-DD timestamps to
-        a maximum number of examples to keep with that set of
-        timestamps
+    :param rel_limit: a dictionary mapping a relation to a
+        maximum number of facts with that relation to keep
 
     :return: a tuple with a downsampled list of fact descriptions and
              a downsampled list of references.
     """
     rel_counter = defaultdict(int)
-    ts_counter = defaultdict(int)
     downsampled_fact_descs = []
-    downampled_ref_list = []
+    downsampled_ref_list = []
 
     for fact, quads in zip(fact_descs, ref_list):
-        rel_set = frozenset(rel for _, rel, _, _ in quads)
-        ts_set = frozenset(mm_dd(ts) for _, _, _, ts in quads)
-        if (
-            rel_counter[rel_set] >= rel_limit[rel_set]
-            or ts_counter[ts_set] >= ts_limit[ts_set]
+        fact_rel_counter = Counter([rel for _, rel, _, _ in quads])
+        if any(
+            rel_counter[rel] + count > rel_limit[rel]
+            for rel, count in fact_rel_counter.items()
         ):
             continue
         downsampled_fact_descs.append(fact)
-        downampled_ref_list.append(quads)
-        rel_counter[rel_set] += 1
-        ts_counter[ts_set] += 1
+        downsampled_ref_list.append(quads)
+        for rel, count in fact_rel_counter.items():
+            rel_counter[rel] += count
 
-    return (downsampled_fact_descs, downampled_ref_list)
+    return (downsampled_fact_descs, downsampled_ref_list)
+
+
+def counter_diff(counter1: Counter, counter2: Counter) -> float:
+    diff = 0
+    keys = set(counter1.keys()).union(counter2.keys())
+    for k in keys:
+        v1 = counter1.get(k, 0)
+        v2 = counter2.get(k, 0)
+        diff += abs(v1 - v2)
+    return diff / max(sum(counter1.values()), sum(counter2.values()))
 
 
 def balance(
@@ -68,32 +71,32 @@ def balance(
 
     :return: (fact_descs1, ref_list1, fact_descs2, ref_list2)
     """
-    rel_counter_1 = Counter(
-        [frozenset(rel for _, rel, _, _ in quads) for quads in ref_list1]
-    )
-    rel_counter_2 = Counter(
-        [frozenset(rel for _, rel, _, _ in quads) for quads in ref_list2]
-    )
-    all_rel_set = set(rel_counter_1.keys()).union(set(rel_counter_2.keys()))
-    rel_limit = {
-        rel_set: min(rel_counter_1.get(rel_set, 0), rel_counter_2.get(rel_set, 0))
-        for rel_set in all_rel_set
-    }
+    rel_counter_1 = Counter([rel for quads in ref_list1 for _, rel, _, _ in quads])
+    rel_counter_2 = Counter([rel for quads in ref_list2 for _, rel, _, _ in quads])
+    # in the case of multi facts, downsampling per relation might not
+    # be sufficient. However, repeating the process can succeed.
+    max_tries = 100
+    tries_nb = 0
+    while counter_diff(rel_counter_1, rel_counter_2) > 0.05 and tries_nb < max_tries:
+        all_rels = set(rel_counter_1.keys()).union(set(rel_counter_2.keys()))
+        rel_limit = {
+            rel: min(rel_counter_1.get(rel, 0), rel_counter_2.get(rel, 0))
+            for rel in all_rels
+        }
 
-    ts_counter_1 = Counter(
-        [frozenset(mm_dd(ts) for _, _, _, ts in quads) for quads in ref_list1]
-    )
-    ts_counter_2 = Counter(
-        [frozenset(mm_dd(ts) for _, _, _, ts in quads) for quads in ref_list2]
-    )
-    all_ts_set = set(ts_counter_1.keys()).union(set(ts_counter_2.keys()))
-    ts_limit = {
-        ts_set: min(ts_counter_1.get(ts_set, 0), ts_counter_2.get(ts_set, 0))
-        for ts_set in all_ts_set
-    }
+        ts_counter_1 = Counter([mm(ts) for quads in ref_list1 for _, _, _, ts in quads])
+        ts_counter_2 = Counter([mm(ts) for quads in ref_list2 for _, _, _, ts in quads])
+        all_ts = set(ts_counter_1.keys()).union(set(ts_counter_2.keys()))
+        ts_limit = {
+            ts: min(ts_counter_1.get(ts, 0), ts_counter_2.get(ts, 0)) for ts in all_ts
+        }
 
-    fact_descs1, ref_list1 = downsample(fact_descs1, ref_list1, rel_limit, ts_limit)
-    fact_descs2, ref_list2 = downsample(fact_descs2, ref_list2, rel_limit, ts_limit)
+        fact_descs1, ref_list1 = downsample_rel(fact_descs1, ref_list1, rel_limit)
+        fact_descs2, ref_list2 = downsample_rel(fact_descs2, ref_list2, rel_limit)
+
+        rel_counter_1 = Counter([rel for quads in ref_list1 for _, rel, _, _ in quads])
+        rel_counter_2 = Counter([rel for quads in ref_list2 for _, rel, _, _ in quads])
+        tries_nb += 1
 
     return (fact_descs1, ref_list1, fact_descs2, ref_list2)
 
@@ -186,12 +189,48 @@ if __name__ == "__main__":
     with open(f"./evaluate/references/{args.second_dataset}.txt") as f:
         ref_list2 = [ast.literal_eval(quads) for quads in f.readlines()]
 
-    fact_descs1, ref_list1, fact_descs2, ref_list2 = balance(
-        fact_descs1, ref_list1, fact_descs2, ref_list2
+    new_ref_list1, new_fact_descs1 = [], []
+    new_ref_list2, new_fact_descs2 = [], []
+    for month in [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08",
+        "09",
+        "10",
+        "11",
+        "12",
+    ]:
+        month1 = [
+            (ref, desc)
+            for ref, desc in zip(ref_list1, fact_descs1)
+            if any(mm(fact[3]) == month for fact in ref)
+        ]
+        month2 = [
+            (ref, desc)
+            for ref, desc in zip(ref_list2, fact_descs2)
+            if any(mm(fact[3]) == month for fact in ref)
+        ]
+        month_fact_descs1, month_ref_list1, month_fact_descs2, month_ref_list2 = (
+            balance(
+                [desc for _, desc in month1],
+                [ref for ref, _ in month1],
+                [desc for _, desc in month2],
+                [ref for ref, _ in month2],
+            )
+        )
+        new_ref_list1 += month_ref_list1
+        new_fact_descs1 += month_fact_descs1
+        new_ref_list2 += month_ref_list2
+        new_fact_descs2 += month_fact_descs2
+
+    write_balanced_dataset(
+        args.first_dataset, new_fact_descs1, new_ref_list1, args.second_dataset
     )
     write_balanced_dataset(
-        args.first_dataset, fact_descs1, ref_list1, args.second_dataset
-    )
-    write_balanced_dataset(
-        args.second_dataset, fact_descs2, ref_list2, args.first_dataset
+        args.second_dataset, new_fact_descs2, new_ref_list2, args.first_dataset
     )
