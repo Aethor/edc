@@ -51,12 +51,14 @@ def clean_quad_prefix(quad: Quad) -> Quad:
 
 
 def parse_hex_unicode(hex_unicode: str) -> str:
-    assert hex_unicode.startswith("u")
+    assert hex_unicode.startswith("u") or hex_unicode.startswith("U")
     return chr(int(hex_unicode[1:], base=16))
 
 
 def clean_unicode(elt: str) -> str:
-    return re.sub(r"_u[0-9A-E]{4}", lambda m: parse_hex_unicode(m.group()[1:]), elt)
+    return re.sub(
+        r"_[uU][0-9A-E]{4}_", lambda m: parse_hex_unicode(m.group()[1:-1]), elt
+    )
 
 
 def clean_quad_unicode(quad: Quad) -> Quad:
@@ -98,11 +100,21 @@ def escape_quad_single_quotes(quad: Quad) -> Quad:
     )
 
 
+def clean_generic_instance(elt: str) -> str:
+    return re.sub(r" ?generic instance", "", elt, flags=re.IGNORECASE)
+
+
+def clean_fact_generic_instance(quad: Quad) -> Quad:
+    subj, rel, obj, ts = quad
+    return (clean_generic_instance(subj), rel, clean_generic_instance(obj), ts)
+
+
 def format_quad(quad: Quad) -> Quad:
     quad = clean_quad_prefix(quad)
     quad = clean_quad_unicode(quad)
     quad = clean_quad_wiki_id(quad)
     quad = clean_quad_underscore(quad)
+    quad = clean_fact_generic_instance(quad)
     quad = escape_quad_single_quotes(quad)
     return quad
 
