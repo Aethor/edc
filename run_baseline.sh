@@ -10,6 +10,7 @@ for model in "${models[@]}"; do
     for dataset in "${datasets[@]}"; do
 
         safe_model_name=$(echo "${model}" | tr '/' ':')
+        output_dir="./output/baseline/${safe_model_name}"
 
         python run_baseline.py \
             --input_text_file_path "./dsets/${dataset}.txt" \
@@ -17,7 +18,14 @@ for model in "${models[@]}"; do
             --cie_prompt_template_file_path './prompt_templates/cie_template.txt' \
             --cie_few_shot_examples_file_path "./few_shot_examples/${dataset}/oie_few_shot_examples.txt" \
             --target_schema_path "./schemas/${dataset}_schema.csv" \
-            --output_dir "./output/baseline/${safe_model_name}/${dataset}_target_alignment"
+            --output_dir "${output_dir}/${dataset}_target_alignment"
+
+        echo -n "scoring ${dataset}..."
+        python -m evaluate.evaluation_script\
+            --edc_output "./output/baseline/${safe_model_name}/${dataset}_target_alignment/iter0/canon_kg.txt"\
+            --reference "./evaluate/references/${dataset}.txt"\
+            > "${output_dir}/${dataset}_score.txt"
+        echo "done!"
 
     done
 

@@ -24,15 +24,10 @@ pip install -r requirements.txt
 
 ## Running Benchmarks
 
-The `run_edc.sh` and `run_baseline.sh` scripts will reproduce the experiments from the paper. Outputs will be saved under `./output/{edc,baseline}/${model}/${dataset}_target_alignment`.
+The `run_edc.sh` and `run_baseline.sh` scripts will reproduce the experiments from the paper. Outputs will be saved under `./output/{edc,baseline}/${model}/${dataset}_target_alignment`, and scores will be saved in `./output/{edc,baseline}/${model}/$dataset_score.txt`.
 
 
-## Scoring Benchmarks
-
-The `score_edc.sh` and `score_baseline.sh` scripts will compute the scores for previously ran experiments. For each dataset `$dataset`, scripts will create a file `./output/{edc,baseline}/${model}/$dataset_score.txt`.
-
-
-### Note on scoring
+## Note on scoring
 
 The scoring script run the `evaluate/evaluation_script.py` module. This module originally comes from the [WebNLG 2020 text-to-triples evaluation script](https://github.com/WebNLG/WebNLG-Text-to-triples/tree/ea436d431752e7a033741bbf7b0120930847dd77). However, we found some bugs in the original implementation, as highlighted in the appendix of our article. We corrected these bugs, and performed property-based testing to ensure correctness (see `./tests/test_evaluaterefcand.py`). The original implementation it available at `./evaluate/archive.py`.
 
