@@ -2,7 +2,7 @@
 
 models=('hf:mistralai/Mistral-7B-Instruct-v0.2' 'hf:meta-llama/Llama-3.1-8B-Instruct')
 
-datasets=('yago_past:balanced-yago2026' 'yago2026:balanced-yago_past' 'yago_past_multi:balanced-yago2026_multi' 'yago2026_multi:balanced-yago_past_multi' 'yago_past:balanced-yago2026:retimestamped-2026' 'yago2026:balanced-yago_past:retimestamped-_past' 'yago_past_multi:balanced-yago2026_multi:retimestamped-2026' 'yago2026_multi:balanced-yago_past_multi:retimestamped-_past')
+datasets=('yago_past:balanced-yago2026' 'yago2026:balanced-yago_past' 'yago_past_multi:balanced-yago2026_multi' 'yago2026_multi:balanced-yago_past_multi' 'yago2026:balanced-yago_past:retimestamped-2022' 'yago2026_multi:balanced-yago_past_multi:retimestamped-2022')
 
 for model in "${models[@]}"; do
 
