@@ -134,15 +134,10 @@ if __name__ == "__main__":
     ref = []
     for example in data:
         quads = example["facts"] if is_multi else [example]
-        for quad in quads:
-            quad = format_quad(
-                (
-                    quad["subject"],
-                    quad["relation"],
-                    quad["object"],
-                    quad["timestamp"],
-                )
-            )
+        quads = [
+            format_quad((q["subject"], q["relation"], q["object"], q["timestamp"]))
+            for q in quads
+        ]
         # we ignore any case where a quadruple has an empty element
         if any(any(elt == "" for elt in quad) for quad in quads):
             continue
@@ -160,18 +155,10 @@ if __name__ == "__main__":
     ref_path = pl.Path("./evaluate/references/") / f"{args.input_file.stem}.txt"
     print(f"writing to {ref_path}...", end="")
     with open(ref_path, "w") as f:
-        for quads in data:
+        for quads in ref:
             f.write("[")
             quad_strings = []
             for quad in quads:
-                quad = format_quad(
-                    (
-                        quad["subject"],
-                        quad["relation"],
-                        quad["object"],
-                        quad["timestamp"],
-                    )
-                )
                 subj, rel, obj, ts = quad
                 quad_strings.append(f"['{subj}', '{rel}', '{obj}', '{ts}']")
             f.write(", ".join(quad_strings))
