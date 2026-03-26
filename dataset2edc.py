@@ -130,22 +130,37 @@ if __name__ == "__main__":
     # guess if we are in the single or multi-facts setup
     is_multi = "facts" in data[0]
 
+    descriptions = []
+    ref = []
+    for example in data:
+        quads = example["facts"] if is_multi else [example]
+        for quad in quads:
+            quad = format_quad(
+                (
+                    quad["subject"],
+                    quad["relation"],
+                    quad["object"],
+                    quad["timestamp"],
+                )
+            )
+        # we ignore any case where a quadruple has an empty element
+        if any(any(elt == "" for elt in quad) for quad in quads):
+            continue
+        ref.append(quads)
+        descriptions.append(re.sub(r"\n", " ", example["description"]))
+    assert len(descriptions) == len(ref)
+
     desc_path = pl.Path("./dsets/") / f"{args.input_file.stem}.txt"
     print(f"writing to {desc_path}...", end="")
     with open(desc_path, "w") as f:
-        for example in data:
-            description = re.sub(r"\n", " ", example["description"])
-            f.write(f"{description}\n")
+        for desc in descriptions:
+            f.write(f"{desc}\n")
     print("done!")
 
     ref_path = pl.Path("./evaluate/references/") / f"{args.input_file.stem}.txt"
     print(f"writing to {ref_path}...", end="")
     with open(ref_path, "w") as f:
-        for example in data:
-            if is_multi:
-                quads = example["facts"]
-            else:
-                quads = [example]
+        for quads in data:
             f.write("[")
             quad_strings = []
             for quad in quads:
