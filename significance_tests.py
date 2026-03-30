@@ -9,6 +9,8 @@ from scipy.stats import permutation_test
 from scipy.stats._resampling import PermutationTestResult
 import numpy as np
 from tqdm import tqdm
+from joblib import Parallel, delayed
+from more_itertools import flatten
 from evaluate.evaluation_script import (
     evaluaterefcand,
     calculateAllScores,
@@ -16,12 +18,12 @@ from evaluate.evaluation_script import (
 )
 from unidecode import unidecode
 
-Fact = list[Optional[str]]
+Fact = list[str]
 MetricMode = Literal["exact", "strict", "ent_type", "partial"]
 
 
-def _cleanup_evaluaterefcand_quad(quad: list[str | None]) -> str:
-    quad = [elt if not elt is None else "" for elt in quad]
+def _cleanup_evaluaterefcand_quad(quad: list[str]) -> str:
+    quad = [str(elt) if not elt is None else "" for elt in quad]
     newquad = " | ".join(quad)  # type: ignore
     newquad = re.sub(r"([a-z])([A-Z])", r"\g<1> \g<2>", newquad).lower()
     newquad = re.sub(r"_", " ", newquad).lower()
@@ -41,7 +43,12 @@ class XP:
     refs: list[list[Fact]]
     preds: list[list[Fact]]
 
-    def scores(self) -> dict[MetricMode, list[float]]:
+    def scores(
+        self, silent: bool = False, n_jobs: int = 1
+    ) -> dict[MetricMode, list[float]]:
+        if len(self.refs) == 0:
+            return {"strict": [], "exact": [], "ent_type": [], "partial": []}
+
         # the WebNLG eval script takes quadruples with each element
         # separated with pipes
         refs = [
@@ -51,11 +58,36 @@ class XP:
             [_cleanup_evaluaterefcand_quad(quad) for quad in pred]
             for pred in self.preds
         ]
-        totalsemevallist, totalsemevallistpertag = calculateAllScores(refs, preds)
+
+        chunk_size = len(refs) // n_jobs
+        chunk_size = len(refs) if chunk_size == 0 else chunk_size
+        with Parallel(n_jobs=n_jobs) as parallel:
+            # [(totalsemevallist, totalsemevallistpertag, refs, preds), ...]
+            #  |                                                     |
+            #  <              one such tuple per chunk               >
+            scores = parallel(
+                delayed(calculateAllScores)(
+                    refs[i : i + chunk_size], preds[i : i + chunk_size], silent
+                )
+                for i in range(0, len(refs), chunk_size)
+            )
+            totalsemevallist, totalsemevallistpertag, refs, preds = [], [], [], []
+            for (
+                totalsemevallist_chunk,
+                totalsemevallistpertag_chunk,
+                ref_chunk,
+                pred_chunk,
+            ) in scores:
+                totalsemevallist += totalsemevallist_chunk
+                totalsemevallistpertag += totalsemevallistpertag_chunk
+                refs += ref_chunk
+                preds += pred_chunk
+
         with contextlib.redirect_stdout(None):
             score_dicts, *_ = calculateSystemScore(
                 totalsemevallist, totalsemevallistpertag, refs, preds
             )
+
         return {
             mode: [d[mode]["f1"] for d in score_dicts]
             for mode in ["strict", "exact", "ent_type", "partial"]
