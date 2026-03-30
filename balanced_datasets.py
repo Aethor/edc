@@ -191,20 +191,7 @@ if __name__ == "__main__":
 
     new_ref_list1, new_fact_descs1 = [], []
     new_ref_list2, new_fact_descs2 = [], []
-    for month in [
-        "01",
-        "02",
-        "03",
-        "04",
-        "05",
-        "06",
-        "07",
-        "08",
-        "09",
-        "10",
-        "11",
-        "12",
-    ]:
+    for month in ["{:02d}".format(month) for month in range(1, 13)]:
         month1 = [
             (ref, desc)
             for ref, desc in zip(ref_list1, fact_descs1)
