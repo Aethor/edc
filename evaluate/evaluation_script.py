@@ -5,10 +5,9 @@ from sklearn.exceptions import UndefinedMetricWarning
 # ignore all UndefinedMetricWarning warnings
 simplefilter(action="ignore", category=UndefinedMetricWarning)
 from typing import Literal, Tuple, List, TypedDict
-import sys
+import sys, os
 import itertools as it
 from bs4 import BeautifulSoup
-import os
 import regex as re
 import functools as ft
 from operator import add
@@ -463,6 +462,11 @@ def cleanup_tokens(tokens: list[str]) -> list[str]:
     ]
 
 
+@ft.lru_cache
+def cached_word_tokenize(text: str) -> list[str]:
+    return nltk.word_tokenize(text)
+
+
 class NERSpan(TypedDict):
     label: AttrType
     start: int
@@ -479,8 +483,8 @@ class NERSpansMatch:
 def _swapped_ner_spans(
     ref: str, cand: str, attr_type1: AttrType, attr_type2: AttrType, offset: int
 ) -> NERSpansMatch:
-    reflist = cleanup_tokens(nltk.word_tokenize(ref))
-    candlist = cleanup_tokens(nltk.word_tokenize(cand))
+    reflist = cleanup_tokens(cached_word_tokenize(ref))
+    candlist = cleanup_tokens(cached_word_tokenize(cand))
 
     reflist, candlist = nonrefwords(reflist, candlist, 1, len(candlist))
     candfound, refdicts, canddicts, _ = getrefdict(
@@ -584,7 +588,9 @@ def evaluaterefcand(reference: str, candidate: str) -> tuple[dict, dict]:
     return best_scores
 
 
-def calculateAllScores(newreflist: list[list[str]], newcandlist: list[list[str]]):
+def calculateAllScores(
+    newreflist: list[list[str]], newcandlist: list[list[str]], silent: bool = False
+) -> tuple[list, list, list, list]:
     totalsemevallist = []
     totalsemevallistpertag = []
 
@@ -599,7 +605,11 @@ def calculateAllScores(newreflist: list[list[str]], newcandlist: list[list[str]]
             assert len(newreflist[idx]) == len(newcandlist[idx])
 
     for idx, candidate in tqdm(
-        enumerate(newcandlist), ascii=True, desc="eval", total=len(newcandlist)
+        enumerate(newcandlist),
+        ascii=True,
+        desc="eval",
+        total=len(newcandlist),
+        disable=silent,
     ):
         candidatesemeval = []
         candidatesemevalpertag = []
@@ -617,7 +627,7 @@ def calculateAllScores(newreflist: list[list[str]], newcandlist: list[list[str]]
         totalsemevallist.append(candidatesemeval)
         totalsemevallistpertag.append(candidatesemevalpertag)
 
-    return totalsemevallist, totalsemevallistpertag
+    return totalsemevallist, totalsemevallistpertag, newreflist, newcandlist
 
 
 def calculateSystemScore(
@@ -725,7 +735,10 @@ def calculateSystemScore(
             selectedsemevallistpertag + totaldict["semevalpertaglist"]
         )
         selectedalignment.append(totaldict["combination"])
-        selectedscores.append(totaldict["totalscore"] / len(candidate))
+        if len(candidate) > 0:
+            selectedscores.append(totaldict["totalscore"] / len(candidate))
+        else:
+            selectedscores.append(0)
 
     print("-----------------------------------------------------------------")
     print("Total scores")
@@ -1568,8 +1581,8 @@ def calculateExactTripleScore(reflist: List[List[str]], candlist: List[List[str]
 def main(reffile, candfile):
     reflist, newreflist = getRefs(reffile)
     candlist, newcandlist = getCands(candfile)
-    totalsemevallist, totalsemevallistpertag = calculateAllScores(
-        newreflist, newcandlist
+    totalsemevallist, totalsemevallistpertag, newreflist, newcandlist = (
+        calculateAllScores(newreflist, newcandlist)
     )
     calculateSystemScore(
         totalsemevallist, totalsemevallistpertag, newreflist, newcandlist
