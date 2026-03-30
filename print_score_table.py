@@ -56,10 +56,10 @@ if __name__ == "__main__":
         df_dict["dataset"].append(dataset)
         with open(score_file) as f:
             content = f.read()
-        df_dict["type"].append(get_type_f1(content))
-        df_dict["partial"].append(get_partial_f1(content))
         df_dict["strict"].append(get_strict_f1(content))
         df_dict["exact"].append(get_exact_f1(content))
+        df_dict["type"].append(get_type_f1(content))
+        df_dict["partial"].append(get_partial_f1(content))
 
     df = pd.DataFrame(df_dict)
     f1_cols = ["type", "partial", "strict", "exact"]
